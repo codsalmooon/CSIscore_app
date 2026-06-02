@@ -29,7 +29,3 @@ CSI_ADMIN_PASSCODE="任意のパスコード" npm run dev
 npm test
 npm run build
 ```
-
-## 旧Streamlit版
-
-Python/Streamlit版の実装ファイルは参照用に残しています。
