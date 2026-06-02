@@ -6,3 +6,7 @@ __pycache__/
 !.streamlit/config.toml
 data/
 *.log
+node_modules/
+.next/
+out/
+tsconfig.tsbuildinfo

@@ -1,23 +1,35 @@
 # CSI Score
 
-6因子版CSIスコアの入力・集計用Streamlitアプリです。
+6因子版CSIスコアの入力・集計用ローカルWebアプリです。
 Collaborationの10段階評価項目はN/Aとして記録し、ペア比較ではCollaborationも含めて15問を評価します。
 
 ## セットアップ
 
-```powershell
-uv sync
-uv run streamlit run app.py
+```bash
+npm install
+npm run dev
 ```
+
+ブラウザで `http://localhost:3000` を開きます。
 
 ## 初期設定
 
 研究者画面の簡易パスコードは環境変数 `CSI_ADMIN_PASSCODE` で変更できます。
 未設定の場合は `csi-admin` です。
 
-```powershell
-$env:CSI_ADMIN_PASSCODE = "任意のパスコード"
-uv run streamlit run app.py
+```bash
+CSI_ADMIN_PASSCODE="任意のパスコード" npm run dev
 ```
 
 回答データは `data/csi.sqlite3` に保存されます。
+
+## テスト
+
+```bash
+npm test
+npm run build
+```
+
+## 旧Streamlit版
+
+Python/Streamlit版の実装ファイルは参照用に残しています。
