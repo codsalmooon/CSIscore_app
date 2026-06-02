@@ -8,7 +8,7 @@ from io import StringIO
 from pathlib import Path
 from typing import Any
 
-from csi import ALL_FACTORS, COLLABORATION_ITEMS, ITEMS, PAIR_COMPARISONS
+from csi import FACTORS, ITEMS, PAIR_COMPARISONS
 
 
 DB_PATH = Path("data/csi.sqlite3")
@@ -34,6 +34,11 @@ def init_db(conn: sqlite3.Connection) -> None:
             name TEXT NOT NULL UNIQUE,
             created_at TEXT NOT NULL
         );
+        """
+    )
+    reset_legacy_response_schema(conn)
+    conn.executescript(
+        """
 
         CREATE TABLE IF NOT EXISTS responses (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -41,7 +46,6 @@ def init_db(conn: sqlite3.Connection) -> None:
             condition_id INTEGER NOT NULL,
             submitted_at TEXT NOT NULL,
             score_type TEXT NOT NULL,
-            collaboration_status TEXT NOT NULL,
             item_scores_json TEXT NOT NULL,
             pair_choices_json TEXT NOT NULL,
             pair_order_json TEXT,
@@ -58,11 +62,22 @@ def init_db(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
-def ensure_response_schema(conn: sqlite3.Connection) -> None:
-    columns = {
+def response_schema_columns(conn: sqlite3.Connection) -> set[str]:
+    return {
         row["name"]
         for row in conn.execute("PRAGMA table_info(responses)").fetchall()
     }
+
+
+def reset_legacy_response_schema(conn: sqlite3.Connection) -> None:
+    columns = response_schema_columns(conn)
+    if "collaboration_status" in columns:
+        conn.execute("DROP TABLE responses")
+        conn.commit()
+
+
+def ensure_response_schema(conn: sqlite3.Connection) -> None:
+    columns = response_schema_columns(conn)
     if "pair_order_json" not in columns:
         conn.execute("ALTER TABLE responses ADD COLUMN pair_order_json TEXT")
         conn.commit()
@@ -158,7 +173,6 @@ def save_response(
             condition_id,
             submitted_at,
             score_type,
-            collaboration_status,
             item_scores_json,
             pair_choices_json,
             pair_order_json,
@@ -166,14 +180,13 @@ def save_response(
             factor_counts_json,
             weighted_scores_json,
             csi_score
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             participant_id,
             condition_id,
             utc_now(),
             scores["score_type"],
-            scores["collaboration_status"],
             json.dumps(item_scores, ensure_ascii=False),
             json.dumps(pair_choices, ensure_ascii=False),
             json.dumps(pair_order, ensure_ascii=False),
@@ -197,7 +210,6 @@ def response_rows(conn: sqlite3.Connection) -> list[sqlite3.Row]:
             c.name AS condition_name,
             r.submitted_at,
             r.score_type,
-            r.collaboration_status,
             r.item_scores_json,
             r.pair_choices_json,
             r.pair_order_json,
@@ -272,7 +284,7 @@ def factor_summary(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     grouped: dict[tuple[int, str, str], list[float]] = {}
     for row in rows:
         factor_scores = json.loads(row["factor_scores_json"])
-        for factor in ALL_FACTORS:
+        for factor in FACTORS:
             key = (row["condition_id"], row["condition_name"], factor)
             grouped.setdefault(key, []).append(float(factor_scores.get(factor, 0)))
 
@@ -321,14 +333,11 @@ def raw_data_csv(conn: sqlite3.Connection) -> str:
             "condition_name": row["condition_name"],
             "submitted_at": row["submitted_at"],
             "score_type": row["score_type"],
-            "collaboration_status": row["collaboration_status"],
             "csi_score": row["csi_score"],
         }
         for item in ITEMS:
-            flat[item["id"]] = item_scores.get(item["id"])
-        for item in COLLABORATION_ITEMS:
-            flat[item["id"]] = "N/A"
-        for factor in ALL_FACTORS:
+            flat[item["id"]] = item_scores.get(item["id"]) if item["scoreable"] else "N/A"
+        for factor in FACTORS:
             flat[f"{factor}_score"] = factor_scores.get(factor, 0)
             flat[f"{factor}_count"] = factor_counts.get(factor, 0)
             flat[f"{factor}_weighted"] = weighted_scores.get(factor, 0)
@@ -351,21 +360,7 @@ def item_data_csv(conn: sqlite3.Connection) -> str:
                     "item_id": item["id"],
                     "factor": item["factor"],
                     "item_text_ja": item["text_ja"],
-                    "score": item_scores[item["id"]],
-                }
-            )
-        for item in COLLABORATION_ITEMS:
-            rows.append(
-                {
-                    "response_id": row["id"],
-                    "participant_id": row["participant_id"],
-                    "condition_id": row["condition_id"],
-                    "condition_name": row["condition_name"],
-                    "submitted_at": row["submitted_at"],
-                    "item_id": item["id"],
-                    "factor": item["factor"],
-                    "item_text_ja": item["text_ja"],
-                    "score": "N/A",
+                    "score": item_scores[item["id"]] if item["scoreable"] else "N/A",
                 }
             )
     return csv_text(rows)
@@ -377,7 +372,7 @@ def factor_data_csv(conn: sqlite3.Connection) -> str:
         factor_scores = json.loads(row["factor_scores_json"])
         factor_counts = json.loads(row["factor_counts_json"])
         weighted_scores = json.loads(row["weighted_scores_json"])
-        for factor in ALL_FACTORS:
+        for factor in FACTORS:
             rows.append(
                 {
                     "response_id": row["id"],
