@@ -24,18 +24,27 @@ const CSV_LINKS = [
   ["conditions", "条件別集計CSV"],
 ] as const;
 
+const buttonBase =
+  "min-h-11 cursor-pointer rounded-lg border px-4 py-2 disabled:cursor-not-allowed disabled:opacity-50";
+const secondaryButton = `${buttonBase} border-gray-400 bg-white text-[#16181d] hover:border-gray-900`;
+const primaryButton = `${buttonBase} border-gray-900 bg-gray-900 text-white hover:bg-gray-700`;
+const panelBase = "mx-auto mb-4 rounded-lg border border-gray-300 bg-white p-6 shadow-sm";
+const inputClass = "min-h-11 w-full rounded-lg border border-gray-400 bg-white px-3 py-2 text-[#16181d]";
+
 function DataTable({ rows }: { rows: Record<string, unknown>[] }) {
   const headers = useMemo(() => (rows.length > 0 ? Object.keys(rows[0]) : []), [rows]);
   if (rows.length === 0) {
-    return <p className="muted">データはありません。</p>;
+    return <p className="text-gray-500">データはありません。</p>;
   }
   return (
-    <div className="table-wrap">
-      <table>
+    <div className="mt-4 overflow-x-auto">
+      <table className="min-w-full border-collapse whitespace-nowrap">
         <thead>
           <tr>
             {headers.map((header) => (
-              <th key={header}>{header}</th>
+              <th className="border-b border-gray-300 bg-gray-100 px-3 py-2 text-left text-sm font-bold text-gray-500" key={header}>
+                {header}
+              </th>
             ))}
           </tr>
         </thead>
@@ -43,7 +52,9 @@ function DataTable({ rows }: { rows: Record<string, unknown>[] }) {
           {rows.map((row, rowIndex) => (
             <tr key={rowIndex}>
               {headers.map((header) => (
-                <td key={header}>{String(row[header] ?? "")}</td>
+                <td className="border-b border-gray-300 px-3 py-2 text-left" key={header}>
+                  {String(row[header] ?? "")}
+                </td>
               ))}
             </tr>
           ))}
@@ -117,23 +128,28 @@ export default function AdminPage() {
   }
 
   return (
-    <main className="app-shell">
-      <header className="topbar">
-        <a className="brand" href="/">
+    <main className="mx-auto w-[min(1120px,calc(100%_-_2rem))] px-0 pb-12 pt-4">
+      <header className="flex items-center justify-between gap-4 pb-5 pt-2 max-[760px]:grid max-[760px]:items-stretch">
+        <a className="text-[1.05rem] font-bold" href="/">
           研究者画面
         </a>
-        <nav className="nav-links" aria-label="画面切り替え">
-          <a href="/">参加者回答</a>
-          <a href="/admin">研究者画面</a>
+        <nav className="flex gap-1 max-[760px]:flex-wrap" aria-label="画面切り替え">
+          <a className="rounded-lg border border-transparent px-3 py-2 text-gray-500 hover:border-gray-300 hover:text-[#16181d]" href="/">
+            参加者回答
+          </a>
+          <a className="rounded-lg border border-transparent px-3 py-2 text-gray-500 hover:border-gray-300 hover:text-[#16181d]" href="/admin">
+            研究者画面
+          </a>
         </nav>
       </header>
 
-      <section className="panel narrow">
-        <h1>研究者画面</h1>
-        <p className="muted">このアプリの総合点は6因子版CSI（Collaboration項目N/A）です。</p>
-        <label className="field">
-          <span>パスコード</span>
+      <section className={`${panelBase} max-w-[680px]`}>
+        <h1 className="text-[clamp(1.7rem,3vw,2.35rem)]">研究者画面</h1>
+        <p className="text-gray-500">このアプリの総合点は6因子版CSI（Collaboration項目N/A）です。</p>
+        <label className="mt-4 grid gap-2">
+          <span className="text-sm font-semibold text-gray-500">パスコード</span>
           <input
+            className={inputClass}
             type="password"
             value={passcode}
             onChange={(event) => setPasscode(event.target.value)}
@@ -144,61 +160,61 @@ export default function AdminPage() {
             }}
           />
         </label>
-        <div className="actions end">
-          <button className="primary" type="button" onClick={loadAdminData}>
+        <div className="mt-5 flex justify-end gap-3">
+          <button className={primaryButton} type="button" onClick={loadAdminData}>
             表示する
           </button>
         </div>
-        {message && <div className="notice">{message}</div>}
+        {message && <div className="mx-auto mt-4 rounded-lg border border-gray-300 bg-[#fff8e8] px-4 py-3">{message}</div>}
       </section>
 
       {summary && (
         <>
-          <section className="panel wide">
-            <h2>条件一覧</h2>
+          <section className={`${panelBase} max-w-full`}>
+            <h2 className="text-xl">条件一覧</h2>
             <DataTable rows={summary.conditions} />
           </section>
 
-          <section className="panel wide">
-            <h2>削除操作</h2>
+          <section className={`${panelBase} max-w-full`}>
+            <h2 className="text-xl">削除操作</h2>
             {responses.length === 0 ? (
-              <p className="muted">削除できる回答はありません。</p>
+              <p className="text-gray-500">削除できる回答はありません。</p>
             ) : (
-              <div className="delete-row">
-                <select value={selectedResponseId} onChange={(event) => setSelectedResponseId(event.target.value)}>
+              <div className="mt-4 grid grid-cols-[minmax(0,1fr)_auto] gap-3 max-[760px]:grid-cols-1">
+                <select className={inputClass} value={selectedResponseId} onChange={(event) => setSelectedResponseId(event.target.value)}>
                   {responses.map((row) => (
                     <option key={row.id} value={row.id}>
                       回答ID {row.id} / {row.participant_id} / {row.condition_name} / {row.submitted_at}
                     </option>
                   ))}
                 </select>
-                <button type="button" onClick={deleteSelectedResponse}>
+                <button className={secondaryButton} type="button" onClick={deleteSelectedResponse}>
                   回答を削除
                 </button>
               </div>
             )}
           </section>
 
-          <section className="panel wide">
-            <h2>参加者別完了状況</h2>
+          <section className={`${panelBase} max-w-full`}>
+            <h2 className="text-xl">参加者別完了状況</h2>
             <DataTable rows={summary.participantCompletion} />
           </section>
 
-          <section className="panel wide">
-            <h2>条件別集計</h2>
+          <section className={`${panelBase} max-w-full`}>
+            <h2 className="text-xl">条件別集計</h2>
             <DataTable rows={summary.conditionSummary} />
           </section>
 
-          <section className="panel wide">
-            <h2>因子別集計</h2>
+          <section className={`${panelBase} max-w-full`}>
+            <h2 className="text-xl">因子別集計</h2>
             <DataTable rows={summary.factorSummary} />
           </section>
 
-          <section className="panel wide">
-            <h2>CSV出力</h2>
-            <div className="csv-grid">
+          <section className={`${panelBase} max-w-full`}>
+            <h2 className="text-xl">CSV出力</h2>
+            <div className="mt-4 flex flex-wrap gap-3">
               {CSV_LINKS.map(([kind, label]) => (
-                <button key={kind} type="button" onClick={() => downloadCsv(kind)}>
+                <button className={secondaryButton} key={kind} type="button" onClick={() => downloadCsv(kind)}>
                   {label}
                 </button>
               ))}
