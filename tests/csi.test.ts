@@ -54,6 +54,14 @@ describe("CSI scoring", () => {
     ]);
   });
 
+  test("pair comparisons contain each unordered factor pair exactly once", () => {
+    const pairKeys = PAIR_COMPARISONS.map((pair) => [...pair].sort().join("\u0000"));
+
+    expect(PAIR_COMPARISONS).toHaveLength((FACTORS.length * (FACTORS.length - 1)) / 2);
+    expect(PAIR_COMPARISONS.every(([factor, other]) => factor !== other)).toBe(true);
+    expect(new Set(pairKeys).size).toBe(PAIR_COMPARISONS.length);
+  });
+
   test("calculates manual scores", () => {
     const itemScores = defaultItemScores();
     const pairChoices = PAIR_COMPARISONS.map((pair) => pair[0]);
