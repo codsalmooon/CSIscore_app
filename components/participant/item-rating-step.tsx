@@ -2,6 +2,8 @@ import { Button } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
 import { ITEMS } from "@/lib/csi";
 
+const RATING_TICKS = Array.from({ length: 11 }, (_, index) => index);
+
 type ItemRatingStepProps = {
   conditionName?: string;
   itemScores: Record<string, number>;
@@ -13,32 +15,26 @@ type ItemRatingStepProps = {
 export function ItemRatingStep({ conditionName, itemScores, onBack, onNext, onScoreChange }: ItemRatingStepProps) {
   return (
     <Panel>
-      <div className="mb-5 flex items-end justify-between gap-4 max-[760px]:flex-col max-[760px]:items-stretch">
+      <div className="mb-4 flex items-end justify-between gap-4 max-[760px]:flex-col max-[760px]:items-stretch">
         <h2 className="text-xl">10段階評価</h2>
         <span className="text-gray-500">{conditionName}</span>
       </div>
-      <div className="grid gap-6">
+      <div className="grid">
         {ITEMS.map((item) => {
           const value = item.scoreable ? itemScores[item.id] ?? 5 : 0;
           return (
-            <div className="border-t border-gray-300 p-8 pt-5" key={item.id}>
-              <p className="mb-3 mt-4 font-semibold leading-relaxed">{item.textJa}</p>
-              <div className="grid grid-cols-[minmax(8rem,1fr)_minmax(18rem,4fr)_minmax(8rem,1fr)_3rem] items-center gap-3 max-[760px]:grid-cols-[1fr_3rem]">
-                <span className="text-right text-sm text-gray-500 max-[760px]:col-span-2 max-[760px]:text-left">
-                  まったくそう思わない
-                </span>
-                <input
-                  className="w-full accent-gray-900"
-                  type="range"
-                  min="0"
-                  max="10"
-                  value={value}
-                  disabled={!item.scoreable}
-                  onChange={(event) => onScoreChange(item.id, Number(event.target.value))}
-                />
-                <span className="text-sm text-gray-500 max-[760px]:col-span-2">とてもそう思う</span>
-                <strong>{item.scoreable ? value : "N/A"}</strong>
+
+            <div className="border-t border-gray-300 py-16" key={item.id}>
+              <p className="mx-auto w-full max-w-3xl pb-4 font-semibold leading-relaxed">{item.textJa}</p>
+              <div className="text-center text-sm text-gray-700">
+                <strong>{item.scoreable ? value : "回答不要"}</strong>
               </div>
+              <RatingSlider
+                value={value}
+                disabled={!item.scoreable}
+                onChange={(score) => onScoreChange(item.id, score)}
+              />
+
             </div>
           );
         })}
@@ -52,5 +48,50 @@ export function ItemRatingStep({ conditionName, itemScores, onBack, onNext, onSc
         </Button>
       </div>
     </Panel>
+  );
+}
+
+type RatingSliderProps = {
+  value: number;
+  disabled: boolean;
+  onChange: (score: number) => void;
+};
+
+function RatingSlider({ value, disabled, onChange }: RatingSliderProps) {
+  return (
+    <div className="mx-auto w-full max-w-3xl">
+      <div className="relative pt-4">
+        <input
+          className="relative z-10 w-full accent-gray-900 disabled:opacity-50"
+          type="range"
+          min="0"
+          max="10"
+          value={value}
+          disabled={disabled}
+          aria-label="10段階評価"
+          onChange={(event) => onChange(Number(event.target.value))}
+        />
+        <div className="pointer-events-none absolute left-2 right-2 top-1/2 z-20 h-4 -translate-y-1/2">
+          {RATING_TICKS.map((tick) => (
+            <span
+              className="absolute top-0.5 h-4 -translate-x-1/2 -translate-y-1/2 border-l border-gray-400"
+              key={tick}
+              style={{ left: `${tick * 10}%` }}
+            />
+          ))}
+        </div>
+        <div className="relative mx-2 mt-2 h-4 text-xs text-gray-500">
+          {RATING_TICKS.map((tick) => (
+            <span className="absolute -translate-x-1/2" key={tick} style={{ left: `${tick * 10}%` }}>
+              {tick}
+            </span>
+          ))}
+        </div>
+      </div>
+      <div className="mt-3 flex justify-between gap-4 text-sm text-gray-500">
+        <span>まったくそう思わない</span>
+        <span className="text-right">とてもそう思う</span>
+      </div>
+    </div>
   );
 }
