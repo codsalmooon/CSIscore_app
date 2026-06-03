@@ -1,10 +1,15 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { CompletionStep } from "@/components/participant/completion-step";
+import { ConditionStep } from "@/components/participant/condition-step";
+import { ItemRatingStep } from "@/components/participant/item-rating-step";
+import { PairComparisonStep } from "@/components/participant/pair-comparison-step";
+import { MessageBox } from "@/components/ui/message-box";
+import { PageShell } from "@/components/ui/page-shell";
 import {
   ITEMS,
   PAIR_COMPARISONS,
-  PAIR_DESCRIPTIONS_JA,
   Factor,
   isParticipantId,
   newParticipantId,
@@ -182,177 +187,49 @@ export default function ParticipantPage() {
     setMessage("");
   }
 
-  const buttonBase =
-    "min-h-11 cursor-pointer rounded-lg border px-4 py-2 disabled:cursor-not-allowed disabled:opacity-50";
-  const secondaryButton = `${buttonBase} border-gray-400 bg-white text-[#16181d] hover:border-gray-900`;
-  const primaryButton = `${buttonBase} border-gray-900 bg-gray-900 text-white hover:bg-gray-700`;
-  const panelBase = "mx-auto mb-4 rounded-lg border border-gray-300 bg-white p-6 shadow-sm";
-  const fieldClass = "mt-4 grid gap-2";
-  const fieldLabelClass = "text-sm font-semibold text-gray-500";
-  const inputClass = "min-h-11 w-full rounded-lg border border-gray-400 bg-white px-3 py-2 text-[#16181d]";
-
   return (
-    <main className="mx-auto w-[min(1120px,calc(100%-2rem))] px-0 pb-12 pt-4">
-      <header className="flex items-center justify-between gap-4 pb-5 pt-2 max-[760px]:grid max-[760px]:items-stretch">
-        <a className="text-[1.05rem] font-bold">
-          評価入力フォーム
-        </a>
-      </header>
-
+    <PageShell title="評価入力フォーム">
       {message && (
-        <div className="mx-auto mb-4 max-w-170 rounded-lg border border-red-300 bg-[#fff8e8] px-4 py-3 text-red-700">
+        <MessageBox tone="error" width="narrow">
           {message}
-        </div>
+        </MessageBox>
       )}
 
       {step === "condition" && (
-        <section className={`${panelBase} max-w-170`}>
-          <h2 className="text-xl">回答条件の選択</h2>
-          <label className={fieldClass}>
-            <span className={fieldLabelClass}>ID</span>
-            <input className={inputClass} value={session.participantId} disabled />
-          </label>
-          <div className="mt-8 text-gray-500">
-            回答済み: {session.completedConditionIds.length} / {conditions.length || 3}
-          </div>
-          <label className={fieldClass}>
-            <span className={fieldLabelClass}>入力する回答を選択</span>
-            <select
-              className={inputClass}
-              value={selectedConditionId ?? ""}
-              onChange={(event) => setSelectedConditionId(Number(event.target.value))}
-            >
-              <option value="" disabled>
-                選択してください
-              </option>
-              {remainingConditions.map((condition) => (
-                <option key={condition.id} value={condition.id}>
-                  {condition.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <div className="mt-5 flex justify-end gap-3">
-            <button className={primaryButton} type="button" onClick={startItems}>
-              評価へ進む
-            </button>
-          </div>
-        </section>
+        <ConditionStep
+          completedCount={session.completedConditionIds.length}
+          conditions={remainingConditions}
+          participantId={session.participantId}
+          selectedConditionId={selectedConditionId}
+          totalCount={conditions.length}
+          onSelectCondition={setSelectedConditionId}
+          onStart={startItems}
+        />
       )}
 
       {step === "items" && (
-        <section className={`${panelBase} max-w-full`}>
-          <div className="mb-5 flex items-end justify-between gap-4 max-[760px]:flex-col max-[760px]:items-stretch">
-            <h2 className="text-xl">10段階評価</h2>
-            <span className="text-gray-500">{selectedCondition?.name}</span>
-          </div>
-          <div className="grid gap-6">
-            {ITEMS.map((item) => {
-              const value = item.scoreable ? itemScores[item.id] ?? 5 : 0;
-              return (
-                <div className="p-8 border-t border-gray-300 pt-5" key={item.id}>
-                  <p className="mt-4 mb-3 font-semibold leading-relaxed">{item.textJa}</p>
-                  <div className="grid grid-cols-[minmax(8rem,1fr)_minmax(18rem,4fr)_minmax(8rem,1fr)_3rem] items-center gap-3 max-[760px]:grid-cols-[1fr_3rem]">
-                    <span className="text-right text-sm text-gray-500 max-[760px]:col-span-2 max-[760px]:text-left">
-                      まったくそう思わない
-                    </span>
-                    <input
-                      className="w-full accent-gray-900"
-                      type="range"
-                      min="0"
-                      max="10"
-                      value={value}
-                      disabled={!item.scoreable}
-                      onChange={(event) =>
-                        setItemScores({ ...itemScores, [item.id]: Number(event.target.value) })
-                      }
-                    />
-                    <span className="text-sm text-gray-500 max-[760px]:col-span-2">とてもそう思う</span>
-                    <strong>{item.scoreable ? value : "N/A"}</strong>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-          <div className="mt-5 flex justify-between gap-3 max-[760px]:flex-col">
-            <button className={secondaryButton} type="button" onClick={() => setStep("condition")}>
-              戻る
-            </button>
-            <button className={primaryButton} type="button" onClick={startPairs}>
-              ペア比較へ進む
-            </button>
-          </div>
-        </section>
+        <ItemRatingStep
+          conditionName={selectedCondition?.name}
+          itemScores={itemScores}
+          onBack={() => setStep("condition")}
+          onNext={startPairs}
+          onScoreChange={(itemId, score) => setItemScores({ ...itemScores, [itemId]: score })}
+        />
       )}
 
       {step === "pairs" && pairOrder.length > 0 && (
-        <section className={`${panelBase} max-w-full`}>
-          {(() => {
-            const originalPairIndex = pairOrder[pairIndex];
-            const [factorA, factorB] = PAIR_COMPARISONS[originalPairIndex];
-            const selected = pairChoices[pairIndex];
-            return (
-              <>
-                <div className="mb-5 flex items-end justify-between gap-4 max-[760px]:flex-col max-[760px]:items-stretch">
-                  <h1 className="text-[clamp(1.7rem,3vw,2.35rem)]">
-                    ペア比較 {pairIndex + 1} / {PAIR_COMPARISONS.length}
-                  </h1>
-                  <span className="text-gray-500">このタスクを行ううえで、より重要だったものを選んでください。</span>
-                </div>
-                <div className="h-2 overflow-hidden rounded-full bg-gray-200">
-                  <div
-                    className="h-full bg-gray-900 transition-[width] duration-200"
-                    style={{ width: `${((pairIndex + 1) / PAIR_COMPARISONS.length) * 100}%` }}
-                  />
-                </div>
-                <div className="mt-5 grid grid-cols-2 gap-4 max-[760px]:grid-cols-1">
-                  {[factorA, factorB].map((factor, index) => (
-                    <button
-                      key={factor}
-                      className={`grid min-h-48 cursor-pointer content-center whitespace-normal rounded-lg border p-6 text-center ${selected === factor
-                        ? "border-4 border-gray-900 bg-gray-900 text-white"
-                        : "border-gray-400 bg-white text-[#16181d] hover:border-gray-900"
-                        }`}
-                      type="button"
-                      onClick={() => choosePair(factor)}
-                    >
-                      <span className={`mb-3 block text-sm font-bold ${selected === factor ? "text-white/80" : "text-gray-500"}`}>
-                        項目{index + 1}
-                      </span>
-                      {PAIR_DESCRIPTIONS_JA[factor]}
-                    </button>
-                  ))}
-                </div>
-                <div className="mt-5 flex justify-between gap-3 max-[760px]:flex-col">
-                  <button
-                    className={secondaryButton}
-                    type="button"
-                    disabled={pairIndex === 0}
-                    onClick={() => setPairIndex(pairIndex - 1)}
-                  >
-                    戻る
-                  </button>
-                  <button className={primaryButton} type="button" disabled={isSaving} onClick={nextPair}>
-                    {pairIndex === PAIR_COMPARISONS.length - 1 ? "回答を完了する" : "次へ"}
-                  </button>
-                </div>
-              </>
-            );
-          })()}
-        </section>
+        <PairComparisonStep
+          isSaving={isSaving}
+          pairChoices={pairChoices}
+          pairIndex={pairIndex}
+          pairOrder={pairOrder}
+          onBack={() => setPairIndex(pairIndex - 1)}
+          onChoose={choosePair}
+          onNext={nextPair}
+        />
       )}
 
-      {step === "complete" && (
-        <section className={`${panelBase} max-w-170`}>
-          <h1 className="text-[clamp(1.7rem,3vw,2.35rem)]">回答が完了しました</h1>
-          <p className="font-semibold text-emerald-700">3条件すべての回答が完了しました。ご回答ありがとうございました。</p>
-          <div className="mt-5 flex justify-end gap-3">
-            <button className={primaryButton} type="button" onClick={resetAll}>
-              新しい回答を開始する
-            </button>
-          </div>
-        </section>
-      )}
-    </main>
+      {step === "complete" && <CompletionStep onReset={resetAll} />}
+    </PageShell>
   );
 }
