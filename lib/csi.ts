@@ -131,8 +131,20 @@ export type CsiScores = {
   scoreType: "CSI";
 };
 
+const PARTICIPANT_ID_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+const PARTICIPANT_ID_LENGTH = 4;
+
 export function newParticipantId(): string {
-  return `P-${crypto.randomUUID().replaceAll("-", "").slice(0, 8).toUpperCase()}`;
+  const values = new Uint8Array(PARTICIPANT_ID_LENGTH);
+  crypto.getRandomValues(values);
+  return Array.from(
+    values,
+    (value) => PARTICIPANT_ID_CHARS[value % PARTICIPANT_ID_CHARS.length],
+  ).join("");
+}
+
+export function isParticipantId(value: unknown): value is string {
+  return typeof value === "string" && /^[A-Z0-9]{4}$/.test(value);
 }
 
 function zeroFactorRecord(): Record<Factor, number> {

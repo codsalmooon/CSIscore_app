@@ -5,9 +5,9 @@ import { calculateScores, FACTORS, Factor, ITEMS, PAIR_COMPARISONS, CsiScores } 
 
 export const DB_PATH = path.join(process.cwd(), "data", "csi.sqlite3");
 export const EXPERIMENT_CONDITION_NAMES = [
-  "統制条件",
-  "実験条件１（自律）",
-  "実験条件２（他律）",
+  "条件１：なるべく身体を動かさない",
+  "条件２：貧乏ゆすりをしながら",
+  "条件３：エアマットで揺らされながら",
 ] as const;
 
 export type ConditionRow = {
@@ -152,6 +152,10 @@ export function deleteCondition(conn: DatabaseConnection, conditionId: number): 
 
 export function deleteResponse(conn: DatabaseConnection, responseId: number): number {
   return Number(conn.prepare("DELETE FROM responses WHERE id = ?").run(responseId).changes);
+}
+
+export function deleteParticipantResponses(conn: DatabaseConnection, participantId: string): number {
+  return Number(conn.prepare("DELETE FROM responses WHERE participant_id = ?").run(participantId).changes);
 }
 
 export function saveResponse(
@@ -347,6 +351,30 @@ export function rawDataCsv(conn = connect()): string {
     }
     return flat;
   });
+  return csvText(rows);
+}
+
+export function participantScoresCsv(conn = connect()): string {
+  const conditions = listExperimentConditions(conn);
+  const latestByParticipant = new Map<string, Map<number, ResponseRow>>();
+  for (const row of responseRows(conn)) {
+    const participantRows = latestByParticipant.get(row.participant_id) ?? new Map<number, ResponseRow>();
+    const current = participantRows.get(row.condition_id);
+    if (!current || row.id > current.id) {
+      participantRows.set(row.condition_id, row);
+    }
+    latestByParticipant.set(row.participant_id, participantRows);
+  }
+
+  const rows = [...latestByParticipant.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([participantId, conditionRows]) => {
+      const flat: Record<string, unknown> = { participant_id: participantId };
+      conditions.forEach((condition, index) => {
+        flat[`condition_${index + 1}_csi_score`] = conditionRows.get(condition.id)?.csi_score ?? "";
+      });
+      return flat;
+    });
   return csvText(rows);
 }
 

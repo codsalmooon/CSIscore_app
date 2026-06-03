@@ -1,14 +1,24 @@
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, test } from "vitest";
-import { FACTORS, ITEMS, PAIR_COMPARISONS, SCOREABLE_ITEMS, calculateScores } from "@/lib/csi";
+import {
+  FACTORS,
+  ITEMS,
+  PAIR_COMPARISONS,
+  SCOREABLE_ITEMS,
+  calculateScores,
+  isParticipantId,
+  newParticipantId,
+} from "@/lib/csi";
 import {
   EXPERIMENT_CONDITION_NAMES,
   deleteCondition,
+  deleteParticipantResponses,
   deleteResponse,
   initDb,
   itemDataCsv,
   listExperimentConditions,
   pairDataCsv,
+  participantScoresCsv,
   participantCompletionSummary,
   rawDataCsv,
   responseRows,
@@ -26,6 +36,15 @@ function defaultItemScores(value = 5) {
 }
 
 describe("CSI scoring", () => {
+  test("creates four-character alphanumeric participant ids", () => {
+    const participantId = newParticipantId();
+
+    expect(participantId).toMatch(/^[A-Z0-9]{4}$/);
+    expect(isParticipantId("AB12")).toBe(true);
+    expect(isParticipantId("P-AB12")).toBe(false);
+    expect(isParticipantId("P-12345678")).toBe(false);
+  });
+
   test("item definitions mark scoreable items", () => {
     expect(ITEMS).toHaveLength(12);
     expect(SCOREABLE_ITEMS).toHaveLength(10);
@@ -175,6 +194,41 @@ describe("CSI storage and CSV", () => {
     expect(() => deleteCondition(conn, 1)).toThrow();
     expect(deleteResponse(conn, responseId)).toBe(1);
     expect(deleteCondition(conn, 1)).toBe(1);
+    conn.close();
+  });
+
+  test("deletes all responses for a participant", () => {
+    const conn = memoryDb();
+    const itemScores = defaultItemScores();
+    const pairChoices = PAIR_COMPARISONS.map((pair) => pair[0]);
+    const scores = calculateScores(itemScores, pairChoices);
+
+    saveResponse(conn, "P-ONE", 1, itemScores, pairChoices, scores);
+    saveResponse(conn, "P-ONE", 2, itemScores, pairChoices, scores);
+    saveResponse(conn, "P-TWO", 1, itemScores, pairChoices, scores);
+
+    expect(deleteParticipantResponses(conn, "P-ONE")).toBe(2);
+    expect(responseRows(conn).map((row) => row.participant_id)).toEqual(["P-TWO"]);
+    conn.close();
+  });
+
+  test("participant score csv exports latest csi score by condition", () => {
+    const conn = memoryDb();
+    const itemScores = defaultItemScores();
+    const pairChoices = PAIR_COMPARISONS.map((pair) => pair[0]);
+    const scores = calculateScores(itemScores, pairChoices);
+    const [condition1, condition2] = listExperimentConditions(conn);
+
+    saveResponse(conn, "P-ONE", condition1.id, itemScores, pairChoices, { ...scores, csiScore: 10 });
+    saveResponse(conn, "P-ONE", condition1.id, itemScores, pairChoices, { ...scores, csiScore: 40 });
+    saveResponse(conn, "P-ONE", condition2.id, itemScores, pairChoices, { ...scores, csiScore: 20 });
+    saveResponse(conn, "P-TWO", condition2.id, itemScores, pairChoices, { ...scores, csiScore: 30 });
+
+    expect(participantScoresCsv(conn)).toBe(
+      "participant_id,condition_1_csi_score,condition_2_csi_score,condition_3_csi_score\n" +
+        "P-ONE,40,20,\n" +
+        "P-TWO,,30,\n",
+    );
     conn.close();
   });
 

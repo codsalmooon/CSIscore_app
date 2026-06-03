@@ -3,8 +3,6 @@
 import { useMemo, useState } from "react";
 
 type AdminSummary = {
-  conditions: Record<string, unknown>[];
-  participantCompletion: Record<string, unknown>[];
   conditionSummary: Record<string, unknown>[];
   factorSummary: Record<string, unknown>[];
 };
@@ -18,10 +16,7 @@ type ResponseRow = {
 
 const CSV_LINKS = [
   ["raw", "ローデータCSV"],
-  ["items", "項目別CSV"],
-  ["factors", "因子別CSV"],
-  ["pairs", "ペア比較CSV"],
-  ["conditions", "条件別集計CSV"],
+  ["scores", "参加者IDとCSIスコアCSV"],
 ] as const;
 
 const buttonBase =
@@ -68,11 +63,23 @@ export default function AdminPage() {
   const [passcode, setPasscode] = useState("");
   const [summary, setSummary] = useState<AdminSummary | null>(null);
   const [responses, setResponses] = useState<ResponseRow[]>([]);
-  const [selectedResponseId, setSelectedResponseId] = useState("");
+  const [selectedParticipantId, setSelectedParticipantId] = useState("");
   const [message, setMessage] = useState("");
 
-  async function loadAdminData() {
-    setMessage("");
+  const participantOptions = useMemo(() => {
+    const grouped = new Map<string, { participantId: string; responseCount: number }>();
+    for (const row of responses) {
+      const entry = grouped.get(row.participant_id) ?? { participantId: row.participant_id, responseCount: 0 };
+      entry.responseCount += 1;
+      grouped.set(row.participant_id, entry);
+    }
+    return [...grouped.values()].sort((a, b) => a.participantId.localeCompare(b.participantId));
+  }, [responses]);
+
+  async function loadAdminData(clearMessage = true) {
+    if (clearMessage) {
+      setMessage("");
+    }
     const headers = { "X-CSI-Admin-Passcode": passcode };
     const [summaryResponse, responsesResponse] = await Promise.all([
       fetch("/api/admin/summary", { headers }),
@@ -88,23 +95,27 @@ export default function AdminPage() {
     const responsesData = (await responsesResponse.json()) as { responses: ResponseRow[] };
     setSummary(summaryData);
     setResponses(responsesData.responses);
-    setSelectedResponseId(responsesData.responses[0]?.id ? String(responsesData.responses[0].id) : "");
+    const participantIds = [...new Set(responsesData.responses.map((row) => row.participant_id))].sort((a, b) =>
+      a.localeCompare(b),
+    );
+    setSelectedParticipantId(participantIds[0] ?? "");
   }
 
-  async function deleteSelectedResponse() {
-    if (!selectedResponseId) {
+  async function deleteSelectedParticipantResponses() {
+    if (!selectedParticipantId) {
       return;
     }
-    const response = await fetch(`/api/admin/responses/${selectedResponseId}`, {
+    const response = await fetch(`/api/admin/participants/${encodeURIComponent(selectedParticipantId)}/responses`, {
       method: "DELETE",
       headers: { "X-CSI-Admin-Passcode": passcode },
     });
     if (!response.ok) {
-      setMessage("回答を削除できませんでした。");
+      setMessage("参加者の回答を削除できませんでした。");
       return;
     }
-    setMessage("回答を削除しました。");
-    await loadAdminData();
+    const data = (await response.json()) as { deleted?: number };
+    setMessage(`${selectedParticipantId} の回答を ${data.deleted ?? 0} 件削除しました。`);
+    await loadAdminData(false);
   }
 
   async function downloadCsv(kind: string) {
@@ -130,74 +141,63 @@ export default function AdminPage() {
   return (
     <main className="mx-auto w-[min(1120px,calc(100%_-_2rem))] px-0 pb-12 pt-4">
       <header className="flex items-center justify-between gap-4 pb-5 pt-2 max-[760px]:grid max-[760px]:items-stretch">
-        <a className="text-[1.05rem] font-bold" href="/">
+        <a className="text-[1.05rem] font-bold">
           研究者画面
         </a>
-        <nav className="flex gap-1 max-[760px]:flex-wrap" aria-label="画面切り替え">
-          <a className="rounded-lg border border-transparent px-3 py-2 text-gray-500 hover:border-gray-300 hover:text-[#16181d]" href="/">
-            参加者回答
-          </a>
-          <a className="rounded-lg border border-transparent px-3 py-2 text-gray-500 hover:border-gray-300 hover:text-[#16181d]" href="/admin">
-            研究者画面
-          </a>
-        </nav>
+
       </header>
 
-      <section className={`${panelBase} max-w-[680px]`}>
-        <h1 className="text-[clamp(1.7rem,3vw,2.35rem)]">研究者画面</h1>
-        <p className="text-gray-500">このアプリの総合点は6因子版CSI（Collaboration項目N/A）です。</p>
-        <label className="mt-4 grid gap-2">
-          <span className="text-sm font-semibold text-gray-500">パスコード</span>
-          <input
-            className={inputClass}
-            type="password"
-            value={passcode}
-            onChange={(event) => setPasscode(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                void loadAdminData();
-              }
-            }}
-          />
-        </label>
-        <div className="mt-5 flex justify-end gap-3">
-          <button className={primaryButton} type="button" onClick={loadAdminData}>
-            表示する
-          </button>
-        </div>
-        {message && <div className="mx-auto mt-4 rounded-lg border border-gray-300 bg-[#fff8e8] px-4 py-3">{message}</div>}
-      </section>
+      {!summary && (
+        <section className={`${panelBase} max-w-[680px]`}>
+          <label className="mt-4 grid gap-2">
+            <span className="text-sm font-semibold text-gray-500">パスコード</span>
+            <input
+              className={inputClass}
+              type="password"
+              value={passcode}
+              onChange={(event) => setPasscode(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  void loadAdminData();
+                }
+              }}
+            />
+          </label>
+          <div className="mt-5 flex justify-end gap-3">
+            <button className={primaryButton} type="button" onClick={() => void loadAdminData()}>
+              表示する
+            </button>
+          </div>
+          {message && <div className="mx-auto mt-4 rounded-lg border border-gray-300 bg-[#fff8e8] px-4 py-3">{message}</div>}
+        </section>
+      )}
 
       {summary && (
         <>
-          <section className={`${panelBase} max-w-full`}>
-            <h2 className="text-xl">条件一覧</h2>
-            <DataTable rows={summary.conditions} />
-          </section>
+          {message && <div className="mx-auto mb-4 rounded-lg border border-gray-300 bg-[#fff8e8] px-4 py-3">{message}</div>}
 
           <section className={`${panelBase} max-w-full`}>
             <h2 className="text-xl">削除操作</h2>
-            {responses.length === 0 ? (
+            {participantOptions.length === 0 ? (
               <p className="text-gray-500">削除できる回答はありません。</p>
             ) : (
               <div className="mt-4 grid grid-cols-[minmax(0,1fr)_auto] gap-3 max-[760px]:grid-cols-1">
-                <select className={inputClass} value={selectedResponseId} onChange={(event) => setSelectedResponseId(event.target.value)}>
-                  {responses.map((row) => (
-                    <option key={row.id} value={row.id}>
-                      回答ID {row.id} / {row.participant_id} / {row.condition_name} / {row.submitted_at}
+                <select
+                  className={inputClass}
+                  value={selectedParticipantId}
+                  onChange={(event) => setSelectedParticipantId(event.target.value)}
+                >
+                  {participantOptions.map((participant) => (
+                    <option key={participant.participantId} value={participant.participantId}>
+                      {participant.participantId} / {participant.responseCount} 件
                     </option>
                   ))}
                 </select>
-                <button className={secondaryButton} type="button" onClick={deleteSelectedResponse}>
-                  回答を削除
+                <button className={secondaryButton} type="button" onClick={deleteSelectedParticipantResponses}>
+                  参加者の回答をすべて削除
                 </button>
               </div>
             )}
-          </section>
-
-          <section className={`${panelBase} max-w-full`}>
-            <h2 className="text-xl">参加者別完了状況</h2>
-            <DataTable rows={summary.participantCompletion} />
           </section>
 
           <section className={`${panelBase} max-w-full`}>

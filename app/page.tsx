@@ -6,6 +6,7 @@ import {
   PAIR_COMPARISONS,
   PAIR_DESCRIPTIONS_JA,
   Factor,
+  isParticipantId,
   newParticipantId,
 } from "@/lib/csi";
 
@@ -41,7 +42,7 @@ function loadSession(): LocalSession {
   if (stored) {
     try {
       const parsed = JSON.parse(stored) as LocalSession;
-      if (parsed.participantId) {
+      if (isParticipantId(parsed.participantId)) {
         return {
           participantId: parsed.participantId,
           completedConditionIds: parsed.completedConditionIds ?? [],
