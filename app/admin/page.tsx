@@ -21,8 +21,8 @@ type ResponseRow = {
 };
 
 const CSV_LINKS = [
-  ["raw", "ローデータCSV"],
-  ["scores", "参加者IDとCSIスコアCSV"],
+  ["raw", "生データ"],
+  ["scores", "参加者IDと各条件のCSIスコア"],
 ] as const;
 
 export default function AdminPage() {

@@ -34,8 +34,8 @@ export function DeleteResponsesPanel({
               </option>
             ))}
           </SelectInput>
-          <Button type="button" onClick={onDelete}>
-            参加者の回答をすべて削除
+          <Button type="button" variant="primary" className="bg-red-700 text-white font-medium border-red-700" onClick={onDelete}>
+            参加者の回答を削除
           </Button>
         </div>
       )}

@@ -34,10 +34,9 @@ export function PairComparisonStep({
   return (
     <Panel>
       <div className="mb-5 flex items-end justify-between gap-4 max-[760px]:flex-col max-[760px]:items-stretch">
-        <h1 className="text-[clamp(1.7rem,3vw,2.35rem)]">
+        <h1 className="text-xl font-bold">
           ペア比較 {pairIndex + 1} / {PAIR_COMPARISONS.length}
         </h1>
-        <span className="text-gray-500">このタスクを行ううえで、より重要だったものを選んでください。</span>
       </div>
       <div className="h-2 overflow-hidden rounded-full bg-gray-200">
         <div
@@ -45,7 +44,12 @@ export function PairComparisonStep({
           style={{ width: `${((pairIndex + 1) / PAIR_COMPARISONS.length) * 100}%` }}
         />
       </div>
-      <div className="mt-5 grid grid-cols-2 gap-4 max-[760px]:grid-cols-1">
+      <div className="py-4 text-center">
+        <span className="text-gray-500">
+          このタスクを行ううえで、より重要だったものを選んでください。
+        </span>
+      </div>
+      <div className="mt-4 grid grid-cols-2 gap-4 max-[760px]:grid-cols-1">
         {[factorA, factorB].map((factor, index) => {
           const isSelected = selected === factor;
           return (
