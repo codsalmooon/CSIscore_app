@@ -43,6 +43,13 @@ type DatabaseConnection = DatabaseSync;
 
 let db: DatabaseConnection | null = null;
 
+export type MergeParticipantResponsesResult = {
+  updated: number;
+  deleted: number;
+};
+
+export class MergeParticipantResponsesError extends Error {}
+
 export function utcNow(): string {
   return new Date().toISOString().replace(/\.\d{3}Z$/, "+00:00");
 }
@@ -169,12 +176,50 @@ export function mergeParticipantResponses(
   conn: DatabaseConnection,
   sourceParticipantId: string,
   targetParticipantId: string,
-): number {
-  return Number(
-    conn
-      .prepare("UPDATE responses SET participant_id = ? WHERE participant_id = ?")
-      .run(targetParticipantId, sourceParticipantId).changes,
-  );
+): MergeParticipantResponsesResult {
+  if (isParticipantComplete(conn, sourceParticipantId) || isParticipantComplete(conn, targetParticipantId)) {
+    throw new MergeParticipantResponsesError("3条件すべてに回答済みのIDは統合できません。");
+  }
+
+  conn.exec("BEGIN");
+  try {
+    const updated = Number(
+      conn
+        .prepare("UPDATE responses SET participant_id = ? WHERE participant_id = ?")
+        .run(targetParticipantId, sourceParticipantId).changes,
+    );
+    const deleted = deleteDuplicateParticipantConditionResponses(conn, targetParticipantId);
+    conn.exec("COMMIT");
+    return { updated, deleted };
+  } catch (error) {
+    conn.exec("ROLLBACK");
+    throw error;
+  }
+}
+
+function deleteDuplicateParticipantConditionResponses(conn: DatabaseConnection, participantId: string): number {
+  const rows = conn
+    .prepare(
+      `
+      SELECT id, condition_id, submitted_at
+      FROM responses
+      WHERE participant_id = ?
+      ORDER BY condition_id, submitted_at DESC, id DESC
+      `,
+    )
+    .all(participantId) as { id: number; condition_id: number; submitted_at: string }[];
+  const seenConditionIds = new Set<number>();
+  const duplicateIds: number[] = [];
+  for (const row of rows) {
+    if (seenConditionIds.has(row.condition_id)) {
+      duplicateIds.push(row.id);
+      continue;
+    }
+    seenConditionIds.add(row.condition_id);
+  }
+
+  const deleteStmt = conn.prepare("DELETE FROM responses WHERE id = ?");
+  return duplicateIds.reduce((deleted, id) => deleted + Number(deleteStmt.run(id).changes), 0);
 }
 
 export function saveResponse(
@@ -262,6 +307,10 @@ export function completedConditionIdsForParticipant(conn: DatabaseConnection, pa
     )
     .all(participantId) as { condition_id: number }[];
   return rows.map((row) => row.condition_id).filter((conditionId) => conditionIds.has(conditionId));
+}
+
+export function isParticipantComplete(conn: DatabaseConnection, participantId: string): boolean {
+  return completedConditionIdsForParticipant(conn, participantId).length === listExperimentConditions(conn).length;
 }
 
 export function incompleteParticipantSummaries(conn = connect()): ParticipantResumeSummary[] {

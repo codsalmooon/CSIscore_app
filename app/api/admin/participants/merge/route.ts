@@ -1,5 +1,5 @@
 import { isAdminRequest, unauthorizedJson } from "@/lib/admin";
-import { connect, mergeParticipantResponses } from "@/lib/storage";
+import { connect, MergeParticipantResponsesError, mergeParticipantResponses } from "@/lib/storage";
 import { NextRequest } from "next/server";
 
 export const dynamic = "force-dynamic";
@@ -22,5 +22,12 @@ export async function POST(request: NextRequest) {
   if (sourceParticipantId === targetParticipantId) {
     return Response.json({ error: "統合元IDと統合先IDは別のIDを指定してください。" }, { status: 400 });
   }
-  return Response.json({ updated: mergeParticipantResponses(connect(), sourceParticipantId, targetParticipantId) });
+  try {
+    return Response.json(mergeParticipantResponses(connect(), sourceParticipantId, targetParticipantId));
+  } catch (error) {
+    if (error instanceof MergeParticipantResponsesError) {
+      return Response.json({ error: error.message }, { status: 400 });
+    }
+    throw error;
+  }
 }

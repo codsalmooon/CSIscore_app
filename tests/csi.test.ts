@@ -11,6 +11,7 @@ import {
 } from "@/lib/csi";
 import {
   EXPERIMENT_CONDITION_NAMES,
+  MergeParticipantResponsesError,
   completedConditionIdsForParticipant,
   conditionSummary,
   deleteCondition,
@@ -38,6 +39,10 @@ function memoryDb() {
 
 function defaultItemScores(value = 5) {
   return Object.fromEntries(SCOREABLE_ITEMS.map((item) => [item.id, value]));
+}
+
+function setSubmittedAt(conn: DatabaseSync, responseId: number, submittedAt: string) {
+  conn.prepare("UPDATE responses SET submitted_at = ? WHERE id = ?").run(submittedAt, responseId);
 }
 
 describe("CSI scoring", () => {
@@ -344,7 +349,7 @@ describe("CSI storage and CSV", () => {
     conn.close();
   });
 
-  test("participant id merge moves responses without deleting data", () => {
+  test("participant id merge moves responses and reports duplicate deletions", () => {
     const conn = memoryDb();
     const itemScores = defaultItemScores();
     const pairChoices = PAIR_COMPARISONS.map((pair) => pair[0]);
@@ -353,8 +358,71 @@ describe("CSI storage and CSV", () => {
     saveResponse(conn, "P-SRC", 1, itemScores, pairChoices, scores);
     saveResponse(conn, "P-DST", 2, itemScores, pairChoices, scores);
 
-    expect(mergeParticipantResponses(conn, "P-SRC", "P-DST")).toBe(1);
+    expect(mergeParticipantResponses(conn, "P-SRC", "P-DST")).toEqual({ updated: 1, deleted: 0 });
     expect(responseRows(conn).map((row) => row.participant_id)).toEqual(["P-DST", "P-DST"]);
+    conn.close();
+  });
+
+  test("participant id merge rejects completed source or target ids", () => {
+    const conn = memoryDb();
+    const itemScores = defaultItemScores();
+    const pairChoices = PAIR_COMPARISONS.map((pair) => pair[0]);
+    const scores = calculateScores(itemScores, pairChoices);
+    const conditions = listExperimentConditions(conn);
+
+    for (const condition of conditions) {
+      saveResponse(conn, "P-SRC-DONE", condition.id, itemScores, pairChoices, scores);
+      saveResponse(conn, "P-DST-DONE", condition.id, itemScores, pairChoices, scores);
+    }
+    saveResponse(conn, "P-SRC", conditions[0].id, itemScores, pairChoices, scores);
+    saveResponse(conn, "P-DST", conditions[1].id, itemScores, pairChoices, scores);
+
+    expect(() => mergeParticipantResponses(conn, "P-SRC-DONE", "P-DST")).toThrow(MergeParticipantResponsesError);
+    expect(() => mergeParticipantResponses(conn, "P-SRC", "P-DST-DONE")).toThrow(MergeParticipantResponsesError);
+    conn.close();
+  });
+
+  test("participant id merge keeps latest submitted_at response for duplicate conditions", () => {
+    const conn = memoryDb();
+    const itemScores = defaultItemScores();
+    const pairChoices = PAIR_COMPARISONS.map((pair) => pair[0]);
+    const scores = calculateScores(itemScores, pairChoices);
+    const [condition1, condition2] = listExperimentConditions(conn);
+
+    const oldResponseId = saveResponse(conn, "P-DST", condition1.id, itemScores, pairChoices, { ...scores, csiScore: 10 });
+    const latestResponseId = saveResponse(conn, "P-SRC", condition1.id, itemScores, pairChoices, { ...scores, csiScore: 99 });
+    saveResponse(conn, "P-SRC", condition2.id, itemScores, pairChoices, { ...scores, csiScore: 20 });
+    setSubmittedAt(conn, oldResponseId, "2026-01-01T00:00:00+00:00");
+    setSubmittedAt(conn, latestResponseId, "2026-01-02T00:00:00+00:00");
+
+    expect(mergeParticipantResponses(conn, "P-SRC", "P-DST")).toEqual({ updated: 2, deleted: 1 });
+    const rows = responseRows(conn);
+    expect(rows.map((row) => row.id)).not.toContain(oldResponseId);
+    expect(rows.find((row) => row.id === latestResponseId)).toMatchObject({
+      participant_id: "P-DST",
+      condition_id: condition1.id,
+      csi_score: 99,
+    });
+    expect(participantScoresCsv(conn)).toContain("P-DST,99,20,");
+    expect(rawDataCsv(conn)).not.toContain(`\r\n${oldResponseId},`);
+    expect(conditionSummary(conn)[0]).toMatchObject({ csi_mean: "99.000", csi_sd: "0.000" });
+    conn.close();
+  });
+
+  test("participant id merge uses response id as tie breaker for equal submitted_at duplicates", () => {
+    const conn = memoryDb();
+    const itemScores = defaultItemScores();
+    const pairChoices = PAIR_COMPARISONS.map((pair) => pair[0]);
+    const scores = calculateScores(itemScores, pairChoices);
+    const [condition] = listExperimentConditions(conn);
+
+    const olderId = saveResponse(conn, "P-DST", condition.id, itemScores, pairChoices, { ...scores, csiScore: 10 });
+    const newerId = saveResponse(conn, "P-SRC", condition.id, itemScores, pairChoices, { ...scores, csiScore: 20 });
+    setSubmittedAt(conn, olderId, "2026-01-01T00:00:00+00:00");
+    setSubmittedAt(conn, newerId, "2026-01-01T00:00:00+00:00");
+
+    expect(mergeParticipantResponses(conn, "P-SRC", "P-DST")).toEqual({ updated: 1, deleted: 1 });
+    expect(responseRows(conn)).toMatchObject([{ id: newerId, participant_id: "P-DST", csi_score: 20 }]);
     conn.close();
   });
 

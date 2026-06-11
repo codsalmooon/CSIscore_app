@@ -102,12 +102,16 @@ export default function AdminPage() {
         targetParticipantId: mergeTargetParticipantId,
       }),
     });
-    const data = (await response.json()) as { updated?: number; error?: string };
+    const data = (await response.json()) as { updated?: number; deleted?: number; error?: string };
     if (!response.ok) {
       setMessage(data.error ?? "IDを統合できませんでした。");
       return;
     }
-    setMessage(`${mergeSourceParticipantId} の回答を ${mergeTargetParticipantId} に ${data.updated ?? 0} 件統合しました。`);
+    setMessage(
+      `${mergeSourceParticipantId} の回答を ${mergeTargetParticipantId} に ${data.updated ?? 0} 件統合しました。重複回答を ${
+        data.deleted ?? 0
+      } 件削除しました。`,
+    );
     await loadAdminData(false);
   }
 
