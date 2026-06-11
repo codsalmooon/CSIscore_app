@@ -21,9 +21,16 @@ type Condition = {
   created_at: string;
 };
 
-type Step = "condition" | "items" | "pairs" | "complete";
+type ResumeParticipant = {
+  participant_id: string;
+  completed_conditions: number;
+  total_conditions: number;
+  missing_conditions: string[];
+};
 
-const STORAGE_KEY = "csi-local-session";
+type Step = "start" | "resume" | "condition" | "items" | "pairs" | "complete";
+
+const STORAGE_KEY = "csi-last-participant-id";
 
 type LocalSession = {
   participantId: string;
@@ -39,33 +46,20 @@ function shuffleIndexes(length: number): number[] {
   return indexes;
 }
 
-function loadSession(): LocalSession {
+function lastParticipantId(): string {
   if (typeof window === "undefined") {
-    return { participantId: "", completedConditionIds: [] };
+    return "";
   }
-  const stored = window.sessionStorage.getItem(STORAGE_KEY);
-  if (stored) {
-    try {
-      const parsed = JSON.parse(stored) as LocalSession;
-      if (isParticipantId(parsed.participantId)) {
-        return {
-          participantId: parsed.participantId,
-          completedConditionIds: parsed.completedConditionIds ?? [],
-        };
-      }
-    } catch {
-      window.sessionStorage.removeItem(STORAGE_KEY);
-    }
-  }
-  const created = { participantId: newParticipantId(), completedConditionIds: [] };
-  window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(created));
-  return created;
+  const stored = window.localStorage.getItem(STORAGE_KEY) ?? "";
+  return isParticipantId(stored) ? stored : "";
 }
 
 export default function ParticipantPage() {
   const [conditions, setConditions] = useState<Condition[]>([]);
+  const [resumeParticipants, setResumeParticipants] = useState<ResumeParticipant[]>([]);
+  const [selectedResumeParticipantId, setSelectedResumeParticipantId] = useState("");
   const [session, setSession] = useState<LocalSession>({ participantId: "", completedConditionIds: [] });
-  const [step, setStep] = useState<Step>("condition");
+  const [step, setStep] = useState<Step>("start");
   const [selectedConditionId, setSelectedConditionId] = useState<number | null>(null);
   const [itemScores, setItemScores] = useState<Record<string, number>>({});
   const [pairOrder, setPairOrder] = useState<number[]>([]);
@@ -75,27 +69,72 @@ export default function ParticipantPage() {
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
-    setSession(loadSession());
-    fetch("/api/conditions")
-      .then((response) => response.json())
-      .then((data: { conditions: Condition[] }) => setConditions(data.conditions));
+    setSession({ participantId: lastParticipantId(), completedConditionIds: [] });
+    void loadInitialData();
   }, []);
 
   useEffect(() => {
     if (session.participantId) {
-      window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(session));
+      window.localStorage.setItem(STORAGE_KEY, session.participantId);
     }
-  }, [session]);
+  }, [session.participantId]);
 
   const completedIds = useMemo(() => new Set(session.completedConditionIds), [session.completedConditionIds]);
   const remainingConditions = conditions.filter((condition) => !completedIds.has(condition.id));
   const selectedCondition = conditions.find((condition) => condition.id === selectedConditionId) ?? null;
 
   useEffect(() => {
-    if (conditions.length > 0 && remainingConditions.length === 0) {
+    if (step !== "start" && step !== "resume" && conditions.length > 0 && remainingConditions.length === 0) {
       setStep("complete");
     }
-  }, [conditions.length, remainingConditions.length]);
+  }, [conditions.length, remainingConditions.length, step]);
+
+  async function loadInitialData() {
+    const [conditionsResponse, incompleteResponse] = await Promise.all([
+      fetch("/api/conditions"),
+      fetch("/api/participants/incomplete"),
+    ]);
+    const conditionsData = (await conditionsResponse.json()) as { conditions: Condition[] };
+    const incompleteData = (await incompleteResponse.json()) as { participants: ResumeParticipant[] };
+    setConditions(conditionsData.conditions);
+    setResumeParticipants(incompleteData.participants);
+  }
+
+  function startNewParticipant() {
+    setSession({ participantId: newParticipantId(), completedConditionIds: [] });
+    setSelectedConditionId(null);
+    setSelectedResumeParticipantId("");
+    setMessage("");
+    setStep("condition");
+  }
+
+  function showResumeSelection() {
+    if (resumeParticipants.length === 0) {
+      return;
+    }
+    setSelectedResumeParticipantId(resumeParticipants[0]?.participant_id ?? "");
+    setMessage("");
+    setStep("resume");
+  }
+
+  async function resumeSelectedParticipant() {
+    if (!selectedResumeParticipantId) {
+      setMessage("再開するIDを選択してください。");
+      return;
+    }
+    setMessage("");
+    const response = await fetch(
+      `/api/participants/${encodeURIComponent(selectedResumeParticipantId)}/completed-conditions`,
+    );
+    const data = (await response.json()) as { completedConditionIds?: number[]; error?: string };
+    if (!response.ok || !data.completedConditionIds) {
+      setMessage(data.error ?? "回答済み条件の取得に失敗しました。");
+      return;
+    }
+    setSession({ participantId: selectedResumeParticipantId, completedConditionIds: data.completedConditionIds });
+    setSelectedConditionId(null);
+    setStep(data.completedConditionIds.length >= conditions.length ? "complete" : "condition");
+  }
 
   function startItems() {
     if (selectedConditionId == null) {
@@ -146,6 +185,12 @@ export default function ParticipantPage() {
     }
     const completedConditionIds = [...new Set([...session.completedConditionIds, selectedConditionId])];
     setSession({ ...session, completedConditionIds });
+    setResumeParticipants((participants) =>
+      participants.filter(
+        (participant) =>
+          participant.participant_id !== session.participantId || completedConditionIds.length < participant.total_conditions,
+      ),
+    );
     setSelectedConditionId(null);
     setItemScores({});
     setPairChoices([]);
@@ -177,8 +222,8 @@ export default function ParticipantPage() {
   function resetAll() {
     const nextSession = { participantId: newParticipantId(), completedConditionIds: [] };
     setSession(nextSession);
-    window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(nextSession));
     setSelectedConditionId(null);
+    setSelectedResumeParticipantId("");
     setItemScores({});
     setPairChoices([]);
     setPairOrder([]);
@@ -193,6 +238,69 @@ export default function ParticipantPage() {
         <MessageBox tone="error" width="narrow">
           {message}
         </MessageBox>
+      )}
+
+      {step === "start" && (
+        <section className="mx-auto max-w-[680px] rounded-lg border border-gray-300 bg-white p-6 shadow-sm">
+          <h2 className="text-xl">開始方法の選択</h2>
+          <p className="mt-3 text-gray-600">
+            新しいIDで回答を始めるか、未完了の既存IDから続きを再開してください。
+          </p>
+          {session.participantId && <p className="mt-3 text-sm text-gray-500">最後に使用したID: {session.participantId}</p>}
+          <div className="mt-6 grid grid-cols-2 gap-3 max-[560px]:grid-cols-1">
+            <button
+              type="button"
+              className="min-h-11 cursor-pointer rounded-lg border border-gray-900 bg-gray-900 px-4 py-2 text-white hover:bg-gray-700"
+              onClick={startNewParticipant}
+            >
+              新規IDで開始
+            </button>
+            <button
+              type="button"
+              className="min-h-11 cursor-pointer rounded-lg border border-gray-400 bg-white px-4 py-2 text-[#16181d] hover:border-gray-900 disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={resumeParticipants.length === 0}
+              onClick={showResumeSelection}
+            >
+              既存IDで再開
+            </button>
+          </div>
+        </section>
+      )}
+
+      {step === "resume" && (
+        <section className="mx-auto max-w-[680px] rounded-lg border border-gray-300 bg-white p-6 shadow-sm">
+          <h2 className="text-xl">再開するIDの選択</h2>
+          <label className="mt-4 grid gap-2">
+            <span className="text-sm font-semibold text-gray-500">未完了ID</span>
+            <select
+              className="min-h-11 w-full rounded-lg border border-gray-400 bg-white px-3 py-2 text-[#16181d]"
+              value={selectedResumeParticipantId}
+              onChange={(event) => setSelectedResumeParticipantId(event.target.value)}
+            >
+              {resumeParticipants.map((participant) => (
+                <option key={participant.participant_id} value={participant.participant_id}>
+                  {participant.participant_id} / {participant.completed_conditions} / {participant.total_conditions} 完了
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="mt-5 flex justify-end gap-3">
+            <button
+              type="button"
+              className="min-h-11 cursor-pointer rounded-lg border border-gray-400 bg-white px-4 py-2 text-[#16181d] hover:border-gray-900"
+              onClick={() => setStep("start")}
+            >
+              戻る
+            </button>
+            <button
+              type="button"
+              className="min-h-11 cursor-pointer rounded-lg border border-gray-900 bg-gray-900 px-4 py-2 text-white hover:bg-gray-700"
+              onClick={() => void resumeSelectedParticipant()}
+            >
+              このIDで再開
+            </button>
+          </div>
+        </section>
       )}
 
       {step === "condition" && (

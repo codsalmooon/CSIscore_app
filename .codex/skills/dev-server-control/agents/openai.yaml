@@ -1,0 +1,4 @@
+interface:
+  display_name: "Dev Server Control"
+  short_description: "Start, stop, and verify this repository's Next.js dev server."
+  default_prompt: "Use this skill when starting or stopping the CSIscore_app development server."

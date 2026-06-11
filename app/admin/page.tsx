@@ -1,8 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { CsvExportPanel } from "@/components/admin/csv-export-panel";
 import { DeleteResponsesPanel } from "@/components/admin/delete-responses-panel";
+import { MergeParticipantsPanel } from "@/components/admin/merge-participants-panel";
 import { PasscodePanel } from "@/components/admin/passcode-panel";
 import { SummaryPanel } from "@/components/admin/summary-panel";
 import { MessageBox } from "@/components/ui/message-box";
@@ -30,6 +32,8 @@ export default function AdminPage() {
   const [summary, setSummary] = useState<AdminSummary | null>(null);
   const [responses, setResponses] = useState<ResponseRow[]>([]);
   const [selectedParticipantId, setSelectedParticipantId] = useState("");
+  const [mergeSourceParticipantId, setMergeSourceParticipantId] = useState("");
+  const [mergeTargetParticipantId, setMergeTargetParticipantId] = useState("");
   const [message, setMessage] = useState("");
 
   const participantOptions = useMemo(() => {
@@ -65,6 +69,8 @@ export default function AdminPage() {
       a.localeCompare(b),
     );
     setSelectedParticipantId(participantIds[0] ?? "");
+    setMergeSourceParticipantId(participantIds[0] ?? "");
+    setMergeTargetParticipantId(participantIds[1] ?? participantIds[0] ?? "");
   }
 
   async function deleteSelectedParticipantResponses() {
@@ -81,6 +87,27 @@ export default function AdminPage() {
     }
     const data = (await response.json()) as { deleted?: number };
     setMessage(`${selectedParticipantId} の回答を ${data.deleted ?? 0} 件削除しました。`);
+    await loadAdminData(false);
+  }
+
+  async function mergeParticipantResponses() {
+    const response = await fetch("/api/admin/participants/merge", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSI-Admin-Passcode": passcode,
+      },
+      body: JSON.stringify({
+        sourceParticipantId: mergeSourceParticipantId,
+        targetParticipantId: mergeTargetParticipantId,
+      }),
+    });
+    const data = (await response.json()) as { updated?: number; error?: string };
+    if (!response.ok) {
+      setMessage(data.error ?? "IDを統合できませんでした。");
+      return;
+    }
+    setMessage(`${mergeSourceParticipantId} の回答を ${mergeTargetParticipantId} に ${data.updated ?? 0} 件統合しました。`);
     await loadAdminData(false);
   }
 
@@ -106,6 +133,15 @@ export default function AdminPage() {
 
   return (
     <PageShell title="研究者画面">
+      <div className="mb-4 flex justify-end">
+        <Link
+          className="inline-flex min-h-11 items-center rounded-lg border border-gray-400 bg-white px-4 py-2 text-[#16181d] hover:border-gray-900"
+          href="/sandbox"
+        >
+          入力部品サンドボックス
+        </Link>
+      </div>
+
       {!summary && (
         <PasscodePanel
           message={message}
@@ -123,6 +159,13 @@ export default function AdminPage() {
             selectedParticipantId={selectedParticipantId}
             onDelete={deleteSelectedParticipantResponses}
             onSelectParticipant={setSelectedParticipantId}
+          />
+          <MergeParticipantsPanel
+            sourceParticipantId={mergeSourceParticipantId}
+            targetParticipantId={mergeTargetParticipantId}
+            onMerge={mergeParticipantResponses}
+            onSourceParticipantChange={setMergeSourceParticipantId}
+            onTargetParticipantChange={setMergeTargetParticipantId}
           />
           <SummaryPanel rows={summary.conditionSummary} title="条件別集計" />
           <SummaryPanel rows={summary.factorSummary} title="因子別集計" />

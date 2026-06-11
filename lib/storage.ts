@@ -32,6 +32,13 @@ export type ResponseRow = {
   csi_score: number;
 };
 
+export type ParticipantResumeSummary = {
+  participant_id: string;
+  completed_conditions: number;
+  total_conditions: number;
+  missing_conditions: string[];
+};
+
 type DatabaseConnection = DatabaseSync;
 
 let db: DatabaseConnection | null = null;
@@ -158,6 +165,18 @@ export function deleteParticipantResponses(conn: DatabaseConnection, participant
   return Number(conn.prepare("DELETE FROM responses WHERE participant_id = ?").run(participantId).changes);
 }
 
+export function mergeParticipantResponses(
+  conn: DatabaseConnection,
+  sourceParticipantId: string,
+  targetParticipantId: string,
+): number {
+  return Number(
+    conn
+      .prepare("UPDATE responses SET participant_id = ? WHERE participant_id = ?")
+      .run(targetParticipantId, sourceParticipantId).changes,
+  );
+}
+
 export function saveResponse(
   conn: DatabaseConnection,
   participantId: string,
@@ -227,6 +246,47 @@ export function responseRows(conn = connect()): ResponseRow[] {
       `,
     )
     .all() as ResponseRow[];
+}
+
+export function completedConditionIdsForParticipant(conn: DatabaseConnection, participantId: string): number[] {
+  const conditions = listExperimentConditions(conn);
+  const conditionIds = new Set(conditions.map((condition) => condition.id));
+  const rows = conn
+    .prepare(
+      `
+      SELECT DISTINCT condition_id
+      FROM responses
+      WHERE participant_id = ?
+      ORDER BY condition_id
+      `,
+    )
+    .all(participantId) as { condition_id: number }[];
+  return rows.map((row) => row.condition_id).filter((conditionId) => conditionIds.has(conditionId));
+}
+
+export function incompleteParticipantSummaries(conn = connect()): ParticipantResumeSummary[] {
+  const conditions = listExperimentConditions(conn);
+  const conditionIds = new Set(conditions.map((condition) => condition.id));
+  const grouped = new Map<string, Set<number>>();
+  for (const row of responseRows(conn)) {
+    if (!conditionIds.has(row.condition_id)) {
+      continue;
+    }
+    const completed = grouped.get(row.participant_id) ?? new Set<number>();
+    completed.add(row.condition_id);
+    grouped.set(row.participant_id, completed);
+  }
+  return [...grouped.entries()]
+    .filter(([, completedIds]) => completedIds.size < conditions.length)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([participantId, completedIds]) => ({
+      participant_id: participantId,
+      completed_conditions: completedIds.size,
+      total_conditions: conditions.length,
+      missing_conditions: conditions
+        .filter((condition) => !completedIds.has(condition.id))
+        .map((condition) => condition.name),
+    }));
 }
 
 export function conditionSummary(conn = connect()): Record<string, unknown>[] {
@@ -317,13 +377,14 @@ function csvEscape(value: unknown): string {
 
 export function csvText(rows: Record<string, unknown>[]): string {
   if (rows.length === 0) {
-    return "";
+    return "\uFEFF";
   }
   const headers = Object.keys(rows[0]);
-  return [
+  const body = [
     headers.map(csvEscape).join(","),
     ...rows.map((row) => headers.map((header) => csvEscape(row[header])).join(",")),
-  ].join("\n") + "\n";
+  ].join("\r\n") + "\r\n";
+  return `\uFEFF${body}`;
 }
 
 export function rawDataCsv(conn = connect()): string {

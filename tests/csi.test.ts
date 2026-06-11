@@ -11,12 +11,15 @@ import {
 } from "@/lib/csi";
 import {
   EXPERIMENT_CONDITION_NAMES,
+  completedConditionIdsForParticipant,
   deleteCondition,
   deleteParticipantResponses,
   deleteResponse,
+  incompleteParticipantSummaries,
   initDb,
   itemDataCsv,
   listExperimentConditions,
+  mergeParticipantResponses,
   pairDataCsv,
   participantScoresCsv,
   participantCompletionSummary,
@@ -233,10 +236,76 @@ describe("CSI storage and CSV", () => {
     saveResponse(conn, "P-TWO", condition2.id, itemScores, pairChoices, { ...scores, csiScore: 30 });
 
     expect(participantScoresCsv(conn)).toBe(
-      "participant_id,condition_1_csi_score,condition_2_csi_score,condition_3_csi_score\n" +
-        "P-ONE,40,20,\n" +
-        "P-TWO,,30,\n",
+      "\uFEFFparticipant_id,condition_1_csi_score,condition_2_csi_score,condition_3_csi_score\r\n" +
+        "P-ONE,40,20,\r\n" +
+        "P-TWO,,30,\r\n",
     );
+    conn.close();
+  });
+
+  test("resume summaries only include incomplete participant ids", () => {
+    const conn = memoryDb();
+    const itemScores = defaultItemScores();
+    const pairChoices = PAIR_COMPARISONS.map((pair) => pair[0]);
+    const scores = calculateScores(itemScores, pairChoices);
+    const conditions = listExperimentConditions(conn);
+
+    saveResponse(conn, "P-ONE", conditions[0].id, itemScores, pairChoices, scores);
+    for (const condition of conditions) {
+      saveResponse(conn, "P-DONE", condition.id, itemScores, pairChoices, scores);
+    }
+
+    expect(incompleteParticipantSummaries(conn)).toEqual([
+      {
+        participant_id: "P-ONE",
+        completed_conditions: 1,
+        total_conditions: 3,
+        missing_conditions: [conditions[1].name, conditions[2].name],
+      },
+    ]);
+    conn.close();
+  });
+
+  test("completed condition ids are returned for a participant", () => {
+    const conn = memoryDb();
+    const itemScores = defaultItemScores();
+    const pairChoices = PAIR_COMPARISONS.map((pair) => pair[0]);
+    const scores = calculateScores(itemScores, pairChoices);
+    const [condition1, condition2] = listExperimentConditions(conn);
+
+    saveResponse(conn, "P-ONE", condition1.id, itemScores, pairChoices, scores);
+    saveResponse(conn, "P-ONE", condition2.id, itemScores, pairChoices, scores);
+    saveResponse(conn, "P-TWO", condition1.id, itemScores, pairChoices, scores);
+
+    expect(completedConditionIdsForParticipant(conn, "P-ONE")).toEqual([condition1.id, condition2.id]);
+    conn.close();
+  });
+
+  test("participant id merge moves responses without deleting data", () => {
+    const conn = memoryDb();
+    const itemScores = defaultItemScores();
+    const pairChoices = PAIR_COMPARISONS.map((pair) => pair[0]);
+    const scores = calculateScores(itemScores, pairChoices);
+
+    saveResponse(conn, "P-SRC", 1, itemScores, pairChoices, scores);
+    saveResponse(conn, "P-DST", 2, itemScores, pairChoices, scores);
+
+    expect(mergeParticipantResponses(conn, "P-SRC", "P-DST")).toBe(1);
+    expect(responseRows(conn).map((row) => row.participant_id)).toEqual(["P-DST", "P-DST"]);
+    conn.close();
+  });
+
+  test("csv starts with utf-8 bom and uses crlf line endings", () => {
+    const conn = memoryDb();
+    const itemScores = defaultItemScores();
+    const pairChoices = PAIR_COMPARISONS.map((pair) => pair[0]);
+    saveResponse(conn, "P-TEST", 1, itemScores, pairChoices, calculateScores(itemScores, pairChoices));
+
+    const csv = rawDataCsv(conn);
+
+    expect(csv.startsWith("\uFEFF")).toBe(true);
+    expect(csv).toContain("\r\n");
+    expect(csv.replaceAll("\r\n", "")).not.toContain("\n");
     conn.close();
   });
 
