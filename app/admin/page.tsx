@@ -11,7 +11,9 @@ import { MessageBox } from "@/components/ui/message-box";
 import { PageShell } from "@/components/ui/page-shell";
 
 type AdminSummary = {
+  conditionFriedmanSummary: Record<string, unknown>[];
   conditionSummary: Record<string, unknown>[];
+  factorFriedmanSummary: Record<string, unknown>[];
   factorSummary: Record<string, unknown>[];
 };
 
@@ -108,8 +110,7 @@ export default function AdminPage() {
       return;
     }
     setMessage(
-      `${mergeSourceParticipantId} の回答を ${mergeTargetParticipantId} に ${data.updated ?? 0} 件統合しました。重複回答を ${
-        data.deleted ?? 0
+      `${mergeSourceParticipantId} の回答を ${mergeTargetParticipantId} に ${data.updated ?? 0} 件統合しました。重複回答を ${data.deleted ?? 0
       } 件削除しました。`,
     );
     await loadAdminData(false);
@@ -171,9 +172,22 @@ export default function AdminPage() {
             onSourceParticipantChange={setMergeSourceParticipantId}
             onTargetParticipantChange={setMergeTargetParticipantId}
           />
-          <SummaryPanel rows={summary.conditionSummary} title="条件別集計" />
-          <SummaryPanel rows={summary.factorSummary} title="因子別集計" />
-          <CsvExportPanel links={CSV_LINKS} onDownload={downloadCsv} />
+          <section className="space-y-4">
+            <h1 className="text-3xl font-bold my-8">集計結果</h1>
+          </section>
+          <section className="space-y-4 pb-4">
+            <h2 className="mt-8 text-2xl font-bold">条件別</h2>
+            <SummaryPanel rows={summary.conditionSummary} title="生データ" />
+            <SummaryPanel rows={summary.conditionFriedmanSummary} title="Friedman検定" />
+          </section>
+          <section className="space-y-4 pb-4">
+            <h2 className="mt-8 text-2xl font-bold">因子別</h2>
+            <SummaryPanel rows={summary.factorSummary} title="生データ" />
+            <SummaryPanel rows={summary.factorFriedmanSummary} title="Friedman検定" />
+          </section>
+          <div className="my-8">
+            <CsvExportPanel links={CSV_LINKS} onDownload={downloadCsv} />
+          </div>
         </>
       )}
     </PageShell>

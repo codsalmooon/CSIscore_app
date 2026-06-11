@@ -13,10 +13,12 @@ import {
   EXPERIMENT_CONDITION_NAMES,
   MergeParticipantResponsesError,
   completedConditionIdsForParticipant,
+  conditionFriedmanSummary,
   conditionSummary,
   deleteCondition,
   deleteParticipantResponses,
   deleteResponse,
+  factorFriedmanSummary,
   factorSummary,
   incompleteParticipantSummaries,
   initDb,
@@ -43,6 +45,16 @@ function defaultItemScores(value = 5) {
 
 function setSubmittedAt(conn: DatabaseSync, responseId: number, submittedAt: string) {
   conn.prepare("UPDATE responses SET submitted_at = ? WHERE id = ?").run(submittedAt, responseId);
+}
+
+function testScores(csiScore: number, factorScore = csiScore) {
+  return {
+    scoreType: "CSI" as const,
+    factorScores: Object.fromEntries(FACTORS.map((factor) => [factor, factorScore])) as Record<(typeof FACTORS)[number], number>,
+    factorCounts: Object.fromEntries(FACTORS.map((factor) => [factor, 1])) as Record<(typeof FACTORS)[number], number>,
+    weightedScores: Object.fromEntries(FACTORS.map((factor) => [factor, 0])) as Record<(typeof FACTORS)[number], number>,
+    csiScore,
+  };
 }
 
 describe("CSI scoring", () => {
@@ -259,6 +271,65 @@ describe("CSI storage and CSV", () => {
       [EXPERIMENT_CONDITION_NAMES[0]]: "1.667 (0.786)",
       [EXPERIMENT_CONDITION_NAMES[1]]: "3.000 (0.000)",
       [EXPERIMENT_CONDITION_NAMES[2]]: "",
+    });
+    expect(rows.map((row) => row.factor)).toEqual([...FACTORS]);
+    conn.close();
+  });
+
+  test("condition friedman summary uses complete participants and latest duplicate responses", () => {
+    const conn = memoryDb();
+    const itemScores = defaultItemScores();
+    const pairChoices = PAIR_COMPARISONS.map((pair) => pair[0]);
+    const conditions = listExperimentConditions(conn);
+
+    saveResponse(conn, "P-ONE", conditions[0].id, itemScores, pairChoices, testScores(1));
+    saveResponse(conn, "P-ONE", conditions[1].id, itemScores, pairChoices, testScores(2));
+    const oldDuplicateId = saveResponse(conn, "P-ONE", conditions[2].id, itemScores, pairChoices, testScores(9));
+    const latestDuplicateId = saveResponse(conn, "P-ONE", conditions[2].id, itemScores, pairChoices, testScores(3));
+    saveResponse(conn, "P-TWO", conditions[0].id, itemScores, pairChoices, testScores(1));
+    saveResponse(conn, "P-TWO", conditions[1].id, itemScores, pairChoices, testScores(3));
+    saveResponse(conn, "P-TWO", conditions[2].id, itemScores, pairChoices, testScores(2));
+    saveResponse(conn, "P-MISSING", conditions[0].id, itemScores, pairChoices, testScores(100));
+    saveResponse(conn, "P-MISSING", conditions[1].id, itemScores, pairChoices, testScores(100));
+    setSubmittedAt(conn, oldDuplicateId, "2026-01-01T00:00:00+00:00");
+    setSubmittedAt(conn, latestDuplicateId, "2026-01-02T00:00:00+00:00");
+
+    expect(conditionFriedmanSummary(conn)).toEqual([
+      {
+        measure: "CSIスコア",
+        n: 2,
+        chi_square: "3.000",
+        df: 2,
+        p_value: "0.223",
+        kendall_w: "0.750",
+      },
+    ]);
+    conn.close();
+  });
+
+  test("factor friedman summary returns one result per factor", () => {
+    const conn = memoryDb();
+    const itemScores = defaultItemScores();
+    const pairChoices = PAIR_COMPARISONS.map((pair) => pair[0]);
+    const conditions = listExperimentConditions(conn);
+
+    saveResponse(conn, "P-ONE", conditions[0].id, itemScores, pairChoices, testScores(0, 1));
+    saveResponse(conn, "P-ONE", conditions[1].id, itemScores, pairChoices, testScores(0, 2));
+    saveResponse(conn, "P-ONE", conditions[2].id, itemScores, pairChoices, testScores(0, 3));
+    saveResponse(conn, "P-TWO", conditions[0].id, itemScores, pairChoices, testScores(0, 1));
+    saveResponse(conn, "P-TWO", conditions[1].id, itemScores, pairChoices, testScores(0, 3));
+    saveResponse(conn, "P-TWO", conditions[2].id, itemScores, pairChoices, testScores(0, 2));
+
+    const rows = factorFriedmanSummary(conn);
+
+    expect(rows).toHaveLength(FACTORS.length);
+    expect(rows[0]).toEqual({
+      factor: FACTORS[0],
+      n: 2,
+      chi_square: "3.000",
+      df: 2,
+      p_value: "0.223",
+      kendall_w: "0.750",
     });
     expect(rows.map((row) => row.factor)).toEqual([...FACTORS]);
     conn.close();

@@ -424,6 +424,130 @@ export function factorSummary(conn = connect()): Record<string, unknown>[] {
   });
 }
 
+type FriedmanResult = {
+  n: number;
+  chiSquare: number | null;
+  df: number | null;
+  pValue: number | null;
+  kendallW: number | null;
+};
+
+function latestExperimentResponsesByParticipant(conn: DatabaseConnection): Map<string, Map<number, ResponseRow>> {
+  const conditionIds = new Set(listExperimentConditions(conn).map((condition) => condition.id));
+  const latestByParticipant = new Map<string, Map<number, ResponseRow>>();
+  for (const row of responseRows(conn)) {
+    if (!conditionIds.has(row.condition_id)) {
+      continue;
+    }
+    const participantRows = latestByParticipant.get(row.participant_id) ?? new Map<number, ResponseRow>();
+    const current = participantRows.get(row.condition_id);
+    if (
+      !current ||
+      row.submitted_at > current.submitted_at ||
+      (row.submitted_at === current.submitted_at && row.id > current.id)
+    ) {
+      participantRows.set(row.condition_id, row);
+    }
+    latestByParticipant.set(row.participant_id, participantRows);
+  }
+  return latestByParticipant;
+}
+
+function completeLatestResponseSets(conn: DatabaseConnection): ResponseRow[][] {
+  const conditions = listExperimentConditions(conn);
+  return [...latestExperimentResponsesByParticipant(conn).entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .flatMap(([, rowsByCondition]) => {
+      const rows = conditions.map((condition) => rowsByCondition.get(condition.id));
+      return rows.every(Boolean) ? [rows as ResponseRow[]] : [];
+    });
+}
+
+function ranksForValues(values: number[]): number[] {
+  const sorted = values
+    .map((value, index) => ({ value, index }))
+    .sort((a, b) => a.value - b.value || a.index - b.index);
+  const ranks = Array(values.length).fill(0) as number[];
+  let sortedIndex = 0;
+  while (sortedIndex < sorted.length) {
+    let endIndex = sortedIndex + 1;
+    while (endIndex < sorted.length && sorted[endIndex].value === sorted[sortedIndex].value) {
+      endIndex += 1;
+    }
+    const averageRank = (sortedIndex + 1 + endIndex) / 2;
+    for (let index = sortedIndex; index < endIndex; index += 1) {
+      ranks[sorted[index].index] = averageRank;
+    }
+    sortedIndex = endIndex;
+  }
+  return ranks;
+}
+
+function friedmanTest(valueSets: number[][]): FriedmanResult {
+  const n = valueSets.length;
+  const conditionCount = valueSets[0]?.length ?? 0;
+  const df = conditionCount - 1;
+  if (n === 0 || conditionCount < 2 || valueSets.some((values) => values.length !== conditionCount)) {
+    return { n, chiSquare: null, df: null, pValue: null, kendallW: null };
+  }
+
+  const rankSums = Array(conditionCount).fill(0) as number[];
+  for (const values of valueSets) {
+    ranksForValues(values).forEach((rank, index) => {
+      rankSums[index] += rank;
+    });
+  }
+
+  const chiSquare =
+    (12 / (n * conditionCount * (conditionCount + 1))) *
+      rankSums.reduce((sum, rankSum) => sum + rankSum ** 2, 0) -
+    3 * n * (conditionCount + 1);
+  const normalizedChiSquare = Math.max(0, chiSquare);
+  return {
+    n,
+    chiSquare: normalizedChiSquare,
+    df,
+    pValue: df === 2 ? Math.exp(-normalizedChiSquare / 2) : null,
+    kendallW: normalizedChiSquare / (n * df),
+  };
+}
+
+function formatFriedmanResult(result: FriedmanResult): Record<string, unknown> {
+  return {
+    n: result.n,
+    chi_square: formatSummaryValue(result.chiSquare),
+    df: result.df ?? "",
+    p_value: formatSummaryValue(result.pValue),
+    kendall_w: formatSummaryValue(result.kendallW),
+  };
+}
+
+export function conditionFriedmanSummary(conn = connect()): Record<string, unknown>[] {
+  const valueSets = completeLatestResponseSets(conn).map((rows) => rows.map((row) => row.csi_score));
+  return [
+    {
+      measure: "CSIスコア",
+      ...formatFriedmanResult(friedmanTest(valueSets)),
+    },
+  ];
+}
+
+export function factorFriedmanSummary(conn = connect()): Record<string, unknown>[] {
+  const responseSets = completeLatestResponseSets(conn);
+  return FACTORS.map((factor) => {
+    const valueSets = responseSets.map((rows) =>
+      rows.map((row) => {
+        const factorScores = JSON.parse(row.factor_scores_json) as Partial<Record<Factor, number>>;
+        return Number(factorScores[factor] ?? 0);
+      }),
+    );
+    return {
+      factor,
+      ...formatFriedmanResult(friedmanTest(valueSets)),
+    };
+  });
+}
+
 function formatSummaryValue(value: number | null): string {
   return value == null ? "" : value.toFixed(3);
 }

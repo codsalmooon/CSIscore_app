@@ -2,6 +2,8 @@ import { isAdminRequest, unauthorizedJson } from "@/lib/admin";
 import {
   conditionSummary,
   connect,
+  conditionFriedmanSummary,
+  factorFriedmanSummary,
   factorSummary,
 } from "@/lib/storage";
 import { NextRequest } from "next/server";
@@ -15,6 +17,8 @@ export function GET(request: NextRequest) {
   const conn = connect();
   return Response.json({
     conditionSummary: conditionSummary(conn),
+    conditionFriedmanSummary: conditionFriedmanSummary(conn),
     factorSummary: factorSummary(conn),
+    factorFriedmanSummary: factorFriedmanSummary(conn),
   });
 }
