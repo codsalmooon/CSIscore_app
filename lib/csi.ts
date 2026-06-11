@@ -39,60 +39,60 @@ export const ITEMS: CsiItem[] = [
     id: "enjoyment_1",
     factor: "Enjoyment",
     scoreable: true,
-    textJa: "このシステムまたはツールを日常的に使うことに前向きである。",
+    textJa: "このシステムを日常的に使うことに前向きである。",
   },
   {
     id: "enjoyment_2",
     factor: "Enjoyment",
     scoreable: true,
-    textJa: "このシステムまたはツールを使うことは楽しかった。",
+    textJa: "このシステムを使うことは楽しかった。",
   },
   {
     id: "exploration_1",
     factor: "Exploration",
     scoreable: true,
     textJa:
-      "このシステムまたはツールを使って、多くの異なるアイデア、選択肢、デザイン、結果を探索しやすかった。",
+      "このシステムを使って、多くの異なるアイデア、選択肢、デザイン、結果を探索しやすかった。",
   },
   {
     id: "exploration_2",
     factor: "Exploration",
     scoreable: true,
     textJa:
-      "このシステムまたはツールは、異なるアイデア、結果、可能性を追跡するのに役立った。",
+      "このシステムは、異なるアイデア、結果、可能性を追跡するのに役立った。",
   },
   {
     id: "expressiveness_1",
     factor: "Expressiveness",
     scoreable: true,
     textJa:
-      "このシステムまたはツール内で活動している間、とても創造的でいることができた。",
+      "このシステムで活動している間、とても創造的でいることができた。",
   },
   {
     id: "expressiveness_2",
     factor: "Expressiveness",
     scoreable: true,
-    textJa: "このシステムまたはツールは、自分をとても表現しやすくしてくれた。",
+    textJa: "このシステムは、自分をとても表現しやすくしてくれた。",
   },
   {
     id: "immersion_1",
     factor: "Immersion",
     scoreable: true,
     textJa:
-      "注意が活動に完全に向き、使っているシステムまたはツールのことを忘れていた。",
+      "全ての注意を意識的に活動へ向けることができ、使っているシステムのことを忘れていた。",
   },
   {
     id: "immersion_2",
     factor: "Immersion",
     scoreable: true,
     textJa:
-      "活動に深く没頭し、使っているシステムまたはツールのことを忘れていた。",
+      "無意識的に活動へ深く没頭し、使っているシステムのことを忘れていた。",
   },
   {
     id: "results_worth_effort_1",
     factor: "Results Worth Effort",
     scoreable: true,
-    textJa: "このシステムまたはツールから得られたものに満足している。",
+    textJa: "このシステムから得られたものに満足している。",
   },
   {
     id: "results_worth_effort_2",
@@ -106,14 +106,14 @@ export const ITEMS: CsiItem[] = [
     factor: "Collaboration",
     scoreable: false,
     textJa:
-      "このシステムまたはツールは、他の人が自分と一緒に作業することを容易にした。",
+      "このシステムは、他の人が自分と一緒に作業することを容易にした。",
   },
   {
     id: "collaboration_2",
     factor: "Collaboration",
     scoreable: false,
     textJa:
-      "このシステムまたはツール内で、他の人とアイデアやデザインを共有することはとても簡単だった。",
+      "このシステムで、他の人とアイデアやデザインを共有することはとても簡単だった。",
   },
 ];
 

@@ -19,6 +19,10 @@ export function ItemRatingStep({ conditionName, itemScores, onBack, onNext, onSc
         <h2 className="text-xl">10段階評価</h2>
         <span className="text-gray-500">{conditionName}</span>
       </div>
+      <div className="border-t border-gray-300 mx-auto py-32 text-center text-lg">
+        <p>課題に取り組んだ今回の条件（{conditionName}）において，<br />着座中の椅子や脚の状態を <span className="font-bold">「創造的な課題に取り組むためのシステム」とみなしてください</span>．<br />このシステムが，<span className="font-bold">あなたが創造的な課題に取り組むための思考を，どれだけ支援したか</span> を評価してください．</p>
+
+      </div>
       <div className="grid">
         {ITEMS.map((item) => {
           const value = item.scoreable ? itemScores[item.id] ?? 5 : 0;

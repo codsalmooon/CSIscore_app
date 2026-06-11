@@ -46,7 +46,7 @@ export function PairComparisonStep({
       </div>
       <div className="py-4 text-center">
         <span className="text-gray-500">
-          このタスクを行ううえで、より重要だったものを選んでください。
+          今回の課題を行ううえで、より重要だったものを選んでください。
         </span>
       </div>
       <div className="mt-4 grid grid-cols-2 gap-4 max-[760px]:grid-cols-1">
