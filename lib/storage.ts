@@ -428,6 +428,7 @@ type FriedmanResult = {
   n: number;
   chiSquare: number | null;
   df: number | null;
+  meanRanks: number[] | null;
   pValue: number | null;
   kendallW: number | null;
 };
@@ -488,7 +489,7 @@ function friedmanTest(valueSets: number[][]): FriedmanResult {
   const conditionCount = valueSets[0]?.length ?? 0;
   const df = conditionCount - 1;
   if (n === 0 || conditionCount < 2 || valueSets.some((values) => values.length !== conditionCount)) {
-    return { n, chiSquare: null, df: null, pValue: null, kendallW: null };
+    return { n, chiSquare: null, df: null, meanRanks: null, pValue: null, kendallW: null };
   }
 
   const rankSums = Array(conditionCount).fill(0) as number[];
@@ -507,32 +508,39 @@ function friedmanTest(valueSets: number[][]): FriedmanResult {
     n,
     chiSquare: normalizedChiSquare,
     df,
+    meanRanks: rankSums.map((rankSum) => rankSum / n),
     pValue: df === 2 ? Math.exp(-normalizedChiSquare / 2) : null,
     kendallW: normalizedChiSquare / (n * df),
   };
 }
 
-function formatFriedmanResult(result: FriedmanResult): Record<string, unknown> {
-  return {
+function formatFriedmanResult(result: FriedmanResult, conditions: ConditionRow[]): Record<string, unknown> {
+  const row: Record<string, unknown> = {
     n: result.n,
     chi_square: formatSummaryValue(result.chiSquare),
     df: result.df ?? "",
     p_value: formatSummaryValue(result.pValue),
     kendall_w: formatSummaryValue(result.kendallW),
   };
+  conditions.forEach((condition, index) => {
+    row[`${condition.name} 平均ランク`] = formatSummaryValue(result.meanRanks?.[index] ?? null);
+  });
+  return row;
 }
 
 export function conditionFriedmanSummary(conn = connect()): Record<string, unknown>[] {
+  const conditions = listExperimentConditions(conn);
   const valueSets = completeLatestResponseSets(conn).map((rows) => rows.map((row) => row.csi_score));
   return [
     {
       measure: "CSIスコア",
-      ...formatFriedmanResult(friedmanTest(valueSets)),
+      ...formatFriedmanResult(friedmanTest(valueSets), conditions),
     },
   ];
 }
 
 export function factorFriedmanSummary(conn = connect()): Record<string, unknown>[] {
+  const conditions = listExperimentConditions(conn);
   const responseSets = completeLatestResponseSets(conn);
   return FACTORS.map((factor) => {
     const valueSets = responseSets.map((rows) =>
@@ -543,7 +551,7 @@ export function factorFriedmanSummary(conn = connect()): Record<string, unknown>
     );
     return {
       factor,
-      ...formatFriedmanResult(friedmanTest(valueSets)),
+      ...formatFriedmanResult(friedmanTest(valueSets), conditions),
     };
   });
 }

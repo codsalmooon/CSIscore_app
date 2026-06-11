@@ -302,6 +302,9 @@ describe("CSI storage and CSV", () => {
         df: 2,
         p_value: "0.223",
         kendall_w: "0.750",
+        [`${conditions[0].name} 平均ランク`]: "1.000",
+        [`${conditions[1].name} 平均ランク`]: "2.500",
+        [`${conditions[2].name} 平均ランク`]: "2.500",
       },
     ]);
     conn.close();
@@ -330,6 +333,9 @@ describe("CSI storage and CSV", () => {
       df: 2,
       p_value: "0.223",
       kendall_w: "0.750",
+      [`${conditions[0].name} 平均ランク`]: "1.000",
+      [`${conditions[1].name} 平均ランク`]: "2.500",
+      [`${conditions[2].name} 平均ランク`]: "2.500",
     });
     expect(rows.map((row) => row.factor)).toEqual([...FACTORS]);
     conn.close();
