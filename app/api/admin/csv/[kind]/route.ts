@@ -28,7 +28,7 @@ function tokyoTimestamp(date = new Date()): string {
   return `${parts.year}${parts.month}${parts.day}-${parts.hour}${parts.minute}${parts.second}`;
 }
 
-export function csvFilename(prefix: string, date = new Date()): string {
+function csvFilename(prefix: string, date = new Date()): string {
   return `${prefix}_${tokyoTimestamp(date)}.csv`;
 }
 

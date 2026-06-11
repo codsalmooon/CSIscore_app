@@ -7,7 +7,7 @@ vi.mock("@/lib/storage", () => ({
   rawDataCsv: vi.fn(() => "raw"),
 }));
 
-import { GET, csvFilename } from "@/app/api/admin/csv/[kind]/route";
+import { GET } from "@/app/api/admin/csv/[kind]/route";
 
 function adminRequest() {
   return new Request("http://localhost/api/admin/csv/raw", {
@@ -19,10 +19,6 @@ describe("admin csv route", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-06-11T06:30:45.000Z"));
-  });
-
-  test("builds timestamped csv filenames in Japan time", () => {
-    expect(csvFilename("csi_factor-scores")).toBe("csi_factor-scores_20260611-153045.csv");
   });
 
   test("raw csv uses factor-scores filename", async () => {
