@@ -290,18 +290,17 @@ export function incompleteParticipantSummaries(conn = connect()): ParticipantRes
 }
 
 export function conditionSummary(conn = connect()): Record<string, unknown>[] {
-  return conn
+  const rows = conn
     .prepare(
       `
       SELECT
-        c.id AS condition_id,
         c.name AS condition_name,
-        COUNT(r.id) AS response_count,
         AVG(r.csi_score) AS csi_mean,
         CASE
           WHEN COUNT(r.id) > 1 THEN
             sqrt((SUM(r.csi_score * r.csi_score) - SUM(r.csi_score) * SUM(r.csi_score) / COUNT(r.id)) / (COUNT(r.id) - 1))
-          ELSE 0
+          WHEN COUNT(r.id) = 1 THEN 0
+          ELSE NULL
         END AS csi_sd
       FROM conditions c
       LEFT JOIN responses r ON r.condition_id = c.id
@@ -315,7 +314,17 @@ export function conditionSummary(conn = connect()): Record<string, unknown>[] {
       END
       `,
     )
-    .all(...EXPERIMENT_CONDITION_NAMES, ...EXPERIMENT_CONDITION_NAMES) as Record<string, unknown>[];
+    .all(...EXPERIMENT_CONDITION_NAMES, ...EXPERIMENT_CONDITION_NAMES) as {
+      condition_name: string;
+      csi_mean: number | null;
+      csi_sd: number | null;
+    }[];
+
+  return rows.map((row) => ({
+    condition_name: row.condition_name,
+    csi_mean: formatSummaryValue(row.csi_mean),
+    csi_sd: formatSummaryValue(row.csi_sd),
+  }));
 }
 
 export function participantCompletionSummary(conn = connect()): Record<string, unknown>[] {
@@ -351,23 +360,32 @@ export function factorSummary(conn = connect()): Record<string, unknown>[] {
       grouped.set(key, entry);
     }
   }
-  return [...grouped.values()]
-    .sort((a, b) => a.conditionId - b.conditionId || FACTORS.indexOf(a.factor) - FACTORS.indexOf(b.factor))
-    .map((entry) => {
-      const mean = entry.values.reduce((sum, value) => sum + value, 0) / entry.values.length;
-      const sd =
-        entry.values.length > 1
-          ? Math.sqrt(entry.values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / (entry.values.length - 1))
-          : 0;
-      return {
-        condition_id: entry.conditionId,
-        condition_name: entry.conditionName,
-        factor: entry.factor,
-        response_count: entry.values.length,
-        factor_score_mean: mean,
-        factor_score_sd: sd,
-      };
-    });
+  const conditionNames = listExperimentConditions(conn).map((condition) => condition.name);
+  const groupedByConditionAndFactor = new Map(
+    [...grouped.values()].map((entry) => [`${entry.conditionName}\u0000${entry.factor}`, entry]),
+  );
+
+  return FACTORS.map((factor) => {
+    const row: Record<string, unknown> = { factor };
+    for (const conditionName of conditionNames) {
+      const entry = groupedByConditionAndFactor.get(`${conditionName}\u0000${factor}`);
+      row[conditionName] = entry ? formatMeanAndSd(entry.values) : "";
+    }
+    return row;
+  });
+}
+
+function formatSummaryValue(value: number | null): string {
+  return value == null ? "" : value.toFixed(3);
+}
+
+function formatMeanAndSd(values: number[]): string {
+  const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
+  const sd =
+    values.length > 1
+      ? Math.sqrt(values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / (values.length - 1))
+      : 0;
+  return `${formatSummaryValue(mean)} (${formatSummaryValue(sd)})`;
 }
 
 function csvEscape(value: unknown): string {

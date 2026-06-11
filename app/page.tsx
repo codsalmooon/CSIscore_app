@@ -241,23 +241,20 @@ export default function ParticipantPage() {
       )}
 
       {step === "start" && (
-        <section className="mx-auto max-w-[680px] rounded-lg border border-gray-300 bg-white p-6 shadow-sm">
-          <h2 className="text-xl">開始方法の選択</h2>
-          <p className="mt-3 text-gray-600">
-            新しいIDで回答を始めるか、未完了の既存IDから続きを再開してください。
-          </p>
-          {session.participantId && <p className="mt-3 text-sm text-gray-500">最後に使用したID: {session.participantId}</p>}
-          <div className="mt-6 grid grid-cols-2 gap-3 max-[560px]:grid-cols-1">
+        <section className="mx-auto max-w-170 rounded-lg border border-gray-300 bg-white p-6 shadow-sm">
+          <div className="mx-auto my-8 text-center">
             <button
               type="button"
-              className="min-h-11 cursor-pointer rounded-lg border border-gray-900 bg-gray-900 px-4 py-2 text-white hover:bg-gray-700"
+              className="min-h-11 cursor-pointer rounded-full border border-gray-900 bg-gray-900 px-8 py-4 text-white hover:bg-gray-700"
               onClick={startNewParticipant}
             >
               新規IDで開始
             </button>
+          </div>
+          <div className="mx-auto my-8 text-center">
             <button
               type="button"
-              className="min-h-11 cursor-pointer rounded-lg border border-gray-400 bg-white px-4 py-2 text-[#16181d] hover:border-gray-900 disabled:cursor-not-allowed disabled:opacity-50"
+              className="min-h-11 cursor-pointer rounded-full border border-gray-400 bg-white px-8 py-4 text-[#16181d] hover:border-gray-900 disabled:cursor-not-allowed disabled:opacity-50"
               disabled={resumeParticipants.length === 0}
               onClick={showResumeSelection}
             >
@@ -268,10 +265,9 @@ export default function ParticipantPage() {
       )}
 
       {step === "resume" && (
-        <section className="mx-auto max-w-[680px] rounded-lg border border-gray-300 bg-white p-6 shadow-sm">
+        <section className="mx-auto max-w-170 rounded-lg border border-gray-300 bg-white p-6 shadow-sm">
           <h2 className="text-xl">再開するIDの選択</h2>
           <label className="mt-4 grid gap-2">
-            <span className="text-sm font-semibold text-gray-500">未完了ID</span>
             <select
               className="min-h-11 w-full rounded-lg border border-gray-400 bg-white px-3 py-2 text-[#16181d]"
               value={selectedResumeParticipantId}
@@ -279,7 +275,7 @@ export default function ParticipantPage() {
             >
               {resumeParticipants.map((participant) => (
                 <option key={participant.participant_id} value={participant.participant_id}>
-                  {participant.participant_id} / {participant.completed_conditions} / {participant.total_conditions} 完了
+                  {participant.participant_id} : {participant.completed_conditions} / {participant.total_conditions} 完了
                 </option>
               ))}
             </select>

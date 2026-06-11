@@ -12,9 +12,11 @@ import {
 import {
   EXPERIMENT_CONDITION_NAMES,
   completedConditionIdsForParticipant,
+  conditionSummary,
   deleteCondition,
   deleteParticipantResponses,
   deleteResponse,
+  factorSummary,
   incompleteParticipantSummaries,
   initDb,
   itemDataCsv,
@@ -193,6 +195,67 @@ describe("CSI storage and CSV", () => {
     const csv = pairDataCsv(conn);
     expect(csv).toContain(`1,${pairOrder[0] + 1}`);
     expect(csv).toContain(PAIR_COMPARISONS[pairOrder[0]][0]);
+    conn.close();
+  });
+
+  test("condition summary only shows condition name and rounded csi statistics", () => {
+    const conn = memoryDb();
+    const itemScores = defaultItemScores();
+    const pairChoices = PAIR_COMPARISONS.map((pair) => pair[0]);
+    const scores = calculateScores(itemScores, pairChoices);
+
+    saveResponse(conn, "P-ONE", 1, itemScores, pairChoices, { ...scores, csiScore: 1 });
+    saveResponse(conn, "P-TWO", 1, itemScores, pairChoices, { ...scores, csiScore: 2 });
+    saveResponse(conn, "P-THREE", 2, itemScores, pairChoices, { ...scores, csiScore: 4.3333 });
+
+    expect(conditionSummary(conn)).toEqual([
+      { condition_name: EXPERIMENT_CONDITION_NAMES[0], csi_mean: "1.500", csi_sd: "0.707" },
+      { condition_name: EXPERIMENT_CONDITION_NAMES[1], csi_mean: "4.333", csi_sd: "0.000" },
+      { condition_name: EXPERIMENT_CONDITION_NAMES[2], csi_mean: "", csi_sd: "" },
+    ]);
+    conn.close();
+  });
+
+  test("factor summary pivots factors by condition with rounded mean and sd", () => {
+    const conn = memoryDb();
+    const itemScores = defaultItemScores();
+    const pairChoices = PAIR_COMPARISONS.map((pair) => pair[0]);
+    const factorCounts = Object.fromEntries(FACTORS.map((factor) => [factor, 1])) as Record<(typeof FACTORS)[number], number>;
+    const weightedScores = Object.fromEntries(FACTORS.map((factor) => [factor, 0])) as Record<(typeof FACTORS)[number], number>;
+    const factorScores = (value: number) =>
+      Object.fromEntries(FACTORS.map((factor) => [factor, value])) as Record<(typeof FACTORS)[number], number>;
+
+    saveResponse(conn, "P-ONE", 1, itemScores, pairChoices, {
+      scoreType: "CSI",
+      factorScores: factorScores(1.111),
+      factorCounts,
+      weightedScores,
+      csiScore: 0,
+    });
+    saveResponse(conn, "P-TWO", 1, itemScores, pairChoices, {
+      scoreType: "CSI",
+      factorScores: factorScores(2.222),
+      factorCounts,
+      weightedScores,
+      csiScore: 0,
+    });
+    saveResponse(conn, "P-THREE", 2, itemScores, pairChoices, {
+      scoreType: "CSI",
+      factorScores: factorScores(3),
+      factorCounts,
+      weightedScores,
+      csiScore: 0,
+    });
+
+    const rows = factorSummary(conn);
+    expect(rows).toHaveLength(FACTORS.length);
+    expect(rows[0]).toEqual({
+      factor: FACTORS[0],
+      [EXPERIMENT_CONDITION_NAMES[0]]: "1.667 (0.786)",
+      [EXPERIMENT_CONDITION_NAMES[1]]: "3.000 (0.000)",
+      [EXPERIMENT_CONDITION_NAMES[2]]: "",
+    });
+    expect(rows.map((row) => row.factor)).toEqual([...FACTORS]);
     conn.close();
   });
 
